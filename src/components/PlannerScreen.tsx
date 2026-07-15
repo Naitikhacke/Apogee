@@ -11,6 +11,7 @@ interface Plan {
 }
 
 export default function PlannerScreen() {
+  const [mounted, setMounted] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekDays, setWeekDays] = useState<Date[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,6 +24,8 @@ export default function PlannerScreen() {
   const [newType, setNewType] = useState('Deep Sky');
 
   useEffect(() => {
+    setMounted(true);
+    
     // Generate current week starting from Sunday
     const getWeek = () => {
       const days = [];
@@ -73,6 +76,14 @@ export default function PlannerScreen() {
   const getMonthName = (date: Date) => date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const isSameDay = (d1: Date, d2: Date) => 
     d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full w-full bg-[#0B0F17] text-white items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#D9A441] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0B0F17] text-white overflow-y-auto no-scrollbar pb-24 md:pb-8 relative">
