@@ -1,192 +1,152 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, ScanLine, Telescope, Compass } from 'lucide-react';
+import { Search, Filter, ScanLine, Telescope, Compass, Crosshair, Clock } from 'lucide-react';
 import Image from 'next/image';
 
 export default function SkyMapScreen() {
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [clickedObject, setClickedObject] = useState<{name: string, type: string, image: string} | null>(null);
-  const isInitializing = React.useRef(false);
+  const [mapUrl, setMapUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [time, setTime] = useState(new Date());
+  const [location, setLocation] = useState({ lat: 0, lon: 0, loaded: false });
+  const [selectedTarget, setSelectedTarget] = useState('Zenith');
 
+  // Live Real-Time Clock
   useEffect(() => {
-    if (isInitializing.current) return;
-    isInitializing.current = true;
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-    // Dynamically load Aladin Lite V3 (Real Photographic Deep Sky Survey)
-    const loadAladin = async () => {
-      // Load CSS
-      if (!document.querySelector('link[href*="aladin.css"]')) {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.css';
-        document.head.appendChild(link);
-      }
-
-      // Load JS
-      const script = document.createElement('script');
-      script.src = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js';
-      script.charset = 'utf-8';
-      script.onload = () => {
-        // Initialize Aladin
-        const A = (window as any).A;
-        if (A) {
-          A.init.then(() => {
-            const aladin = A.aladin('#aladin-lite-div', {
-              survey: 'P/DSS2/color', // True color real photograph survey!
-              fov: 60,
-              target: '0 0',
-              showReticle: false,
-              showZoomControl: false,
-              showFullscreenControl: false,
-              showLayersControl: false,
-              showGotoControl: false,
-              showShareControl: false,
-              showCatalog: true,
-              showFrame: false,
-              showSimbadPointerControl: true
-            });
-
-            // Set to user's location if available (convert to RA/Dec roughly, or just point to a cool galaxy)
-            aladin.gotoObject('M 31'); // Default to Andromeda
-            setMapLoaded(true);
-
-            // Listen for clicks on objects
-            aladin.on('objectClicked', (object: any) => {
-              if (object) {
-                setClickedObject({
-                  name: object.data?.main_id || 'Unknown Object',
-                  type: object.data?.otype_txt || 'Star/Galaxy',
-                  image: '/images/andromeda.png' // In a real app we'd fetch the exact thumbnail, using generic for now
-                });
-              } else {
-                setClickedObject(null);
-              }
-            });
-
-            // Save instance to window for buttons to use
-            (window as any).aladinInstance = aladin;
-          });
+  // GPS Location & Map Initialization
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          setLocation({ lat, lon, loaded: true });
+          
+          // Initialize observatory-grade live map
+          setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=${lon}&latitude=${lat}&projection=stereo&constellations=true&constellationlabels=true&meteorshowers=true&showplanets=true&live=true&az=0&keyboard=false&mouse=true&color=0B0F17&starcolor=ffffff&showdate=false&showposition=false`);
+        },
+        (error) => {
+          console.warn('Location blocked, using default coordinates.');
+          setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=0&latitude=0&projection=stereo&constellations=true&constellationlabels=true&live=true&color=0B0F17`);
         }
-      };
-      document.body.appendChild(script);
-    };
-
-    loadAladin();
-
-    return () => {
-      const container = document.getElementById('aladin-lite-div');
-      if (container) container.innerHTML = '';
-    };
+      );
+    }
   }, []);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0B0F17] text-white relative overflow-hidden">
       
-      {/* The actual Aladin Lite Photographic Canvas */}
-      <div 
-        id="aladin-lite-div" 
-        className="absolute inset-0 z-0 cursor-move" 
-        style={{ width: '100%', height: '100%', opacity: mapLoaded ? 1 : 0, transition: 'opacity 1s ease-in' }}
-      ></div>
-
-      {!mapLoaded && (
-        <div className="absolute inset-0 z-0 flex items-center justify-center flex-col gap-4 bg-[#0B0F17]">
-          <div className="w-8 h-8 border-4 border-[#D9A441] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-[#A2A9B3] text-sm animate-pulse">Connecting to Telescope Imagery...</p>
-        </div>
-      )}
-
-      {/* Top Bar - pointer-events-none so you can drag the map underneath */}
-      <div className="relative z-10 px-6 pt-14 md:pt-8 pb-4 max-w-2xl mx-auto w-full pointer-events-none">
-        <div className="flex gap-3 pointer-events-auto">
-          <div className="flex-1 glass rounded-full flex items-center px-4 py-3 md:py-4 border border-white/10 hover:border-white/30 transition-colors bg-[#0B0F17]/50 backdrop-blur-md focus-within:border-white/50 focus-within:bg-[#0B0F17]/80">
-            <Search size={18} className="text-[#A2A9B3] mr-3" />
-            <input 
-              type="text" 
-              placeholder="Search stars, planets, objects..." 
-              className="bg-transparent border-none outline-none text-sm md:text-base w-full text-white placeholder-[#A2A9B3]"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = e.currentTarget.value;
-                  const A = (window as any).aladinInstance;
-                  if (A && val) A.gotoObject(val);
-                }
-              }}
-            />
+      {/* Live Planetarium Backend */}
+      <div className="absolute inset-0 z-0">
+        {isLoading && (
+          <div className="absolute inset-0 z-0 flex items-center justify-center flex-col gap-4 bg-[#0B0F17]">
+            <div className="w-8 h-8 border-4 border-[#D9A441] border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-[#A2A9B3] text-sm animate-pulse">Synchronizing Real-Time Astronomical Data...</p>
           </div>
-          <button className="w-12 h-12 md:w-14 md:h-14 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-colors border border-white/10 bg-[#0B0F17]/50 backdrop-blur-md">
-            <Filter size={20} />
+        )}
+        {mapUrl && (
+          <iframe 
+            src={mapUrl}
+            width="100%" 
+            height="100%" 
+            frameBorder="0" 
+            scrolling="no" 
+            allowFullScreen
+            onLoad={() => setIsLoading(false)}
+            style={{ opacity: isLoading ? 0 : 1, transition: 'opacity 1s ease-in' }}
+            className="absolute inset-0"
+          ></iframe>
+        )}
+      </div>
+
+      {/* Real-Time HUD Overlay (Pointer events none so map can be dragged) */}
+      <div className="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between">
+        
+        {/* Top HUD */}
+        <div className="px-6 pt-14 md:pt-8 w-full max-w-7xl mx-auto flex flex-col gap-4">
+          
+          {/* Live Telemetry Bar */}
+          <div className="flex justify-between items-start w-full">
+            <div className="glass px-4 py-2 rounded-xl flex items-center gap-3 border border-[#4ADE80]/30 bg-[#0B0F17]/60 backdrop-blur-md">
+              <Clock size={16} className="text-[#4ADE80]" />
+              <div className="flex flex-col">
+                <span className="text-xs font-mono text-[#4ADE80]">LIVE / REAL-TIME</span>
+                <span className="text-sm font-bold tracking-wider">{time.toLocaleTimeString('en-US', { hour12: false })}</span>
+              </div>
+            </div>
+
+            {location.loaded && (
+              <div className="glass px-4 py-2 rounded-xl flex items-center gap-3 border border-white/10 bg-[#0B0F17]/60 backdrop-blur-md text-right">
+                <div className="flex flex-col">
+                  <span className="text-xs text-[#A2A9B3]">GPS LINKED</span>
+                  <span className="text-sm font-mono">{Math.abs(location.lat).toFixed(4)}° {location.lat >= 0 ? 'N' : 'S'}</span>
+                </div>
+                <Crosshair size={16} className="text-[#D9A441]" />
+              </div>
+            )}
+          </div>
+
+          {/* Search & Filters */}
+          <div className="flex gap-3 pointer-events-auto max-w-md mt-2">
+            <div className="flex-1 glass rounded-full flex items-center px-4 py-3 border border-white/10 hover:border-white/30 transition-colors bg-[#0B0F17]/70 backdrop-blur-md focus-within:border-[#D9A441]">
+              <Search size={18} className="text-[#A2A9B3] mr-3" />
+              <input 
+                type="text" 
+                placeholder="Search targets..." 
+                className="bg-transparent border-none outline-none text-sm w-full text-white placeholder-[#A2A9B3]"
+              />
+            </div>
+            <button className="w-12 h-12 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-colors border border-white/10 bg-[#0B0F17]/70 backdrop-blur-md">
+              <Filter size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Side Controls */}
+        <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 pointer-events-auto">
+          <button className="w-12 h-12 rounded-full glass flex flex-col items-center justify-center gap-0.5 border border-[#4ADE80]/30 bg-[#4ADE80]/10 hover:bg-[#4ADE80]/20 transition-colors group relative">
+            <ScanLine size={18} className="text-[#4ADE80] group-hover:scale-110 transition-transform" />
+            <span className="absolute left-14 text-xs font-semibold bg-[#4ADE80]/20 text-[#4ADE80] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">AR View</span>
+          </button>
+          <button className="w-12 h-12 rounded-full glass flex flex-col items-center justify-center gap-0.5 hover:bg-white/10 transition-colors group border border-white/10 bg-[#0B0F17]/70 backdrop-blur-md relative">
+            <Compass size={18} className="text-white group-hover:scale-110 transition-transform" />
+            <span className="absolute left-14 text-xs font-semibold bg-white/10 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Recenter</span>
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mt-4 overflow-x-auto no-scrollbar pb-2 pointer-events-auto">
-          <button className="bg-[#D9A441] text-black px-5 py-2 rounded-full text-sm font-semibold whitespace-nowrap glow-amber hover:scale-105 transition-transform">Sky</button>
-          <button className="glass px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap hover:bg-white/10 transition-colors bg-[#0B0F17]/50">Planets</button>
-          <button className="glass px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap hover:bg-white/10 transition-colors bg-[#0B0F17]/50">Constellations</button>
-          <button className="glass px-5 py-2 rounded-full text-sm font-medium whitespace-nowrap hover:bg-white/10 transition-colors bg-[#0B0F17]/50">DSO</button>
-        </div>
-      </div>
-
-      {/* Side Controls */}
-      <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-10 pointer-events-auto">
-        <button className="w-12 h-12 md:w-14 md:h-14 rounded-full glass flex flex-col items-center justify-center gap-0.5 border border-[#4ADE80]/30 bg-[#4ADE80]/10 hover:bg-[#4ADE80]/20 transition-colors group">
-          <ScanLine size={18} className="text-[#4ADE80] md:w-6 md:h-6 group-hover:scale-110 transition-transform" />
-          <span className="text-[9px] md:text-[10px] text-[#4ADE80] font-medium">AR View</span>
-        </button>
-        <button className="w-12 h-12 md:w-14 md:h-14 rounded-full glass flex flex-col items-center justify-center gap-0.5 hover:bg-white/10 transition-colors group border border-white/5 bg-[#0B0F17]/50 backdrop-blur-md">
-          <Telescope size={18} className="text-[#A2A9B3] md:w-6 md:h-6 group-hover:text-white transition-colors group-hover:scale-110" />
-          <span className="text-[9px] md:text-[10px] text-[#A2A9B3] group-hover:text-white transition-colors">Telescope</span>
-        </button>
-      </div>
-
-      {/* Map controls (zoom) */}
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-10 pointer-events-auto">
-        <button 
-          onClick={() => {
-            const A = (window as any).aladinInstance;
-            if (A) A.setZoom(A.getZoom() * 0.8);
-          }} 
-          className="w-10 h-10 md:w-12 md:h-12 rounded-full glass flex items-center justify-center text-xl md:text-2xl font-light hover:bg-white/10 transition-colors border border-white/5 bg-[#0B0F17]/50 backdrop-blur-md hover:scale-105"
-        >+</button>
-        <button 
-          onClick={() => {
-            const A = (window as any).aladinInstance;
-            if (A) A.setZoom(A.getZoom() * 1.2);
-          }} 
-          className="w-10 h-10 md:w-12 md:h-12 rounded-full glass flex items-center justify-center text-xl md:text-2xl font-light hover:bg-white/10 transition-colors border border-white/5 bg-[#0B0F17]/50 backdrop-blur-md hover:scale-105"
-        >-</button>
-      </div>
-
-      {/* Bottom Card (Shows either default Andromeda or Clicked Object) */}
-      <div className="absolute bottom-28 md:bottom-8 left-6 right-6 md:right-auto md:w-[400px] md:left-6 z-10 pointer-events-auto">
-        <div className="glass-panel rounded-3xl p-5 md:p-6 flex flex-col gap-4 border border-white/10 bg-[#0B0F17]/60 backdrop-blur-xl shadow-2xl">
-          <div className="flex gap-4 items-center">
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden relative shrink-0 shadow-lg">
-               <Image src={clickedObject?.image || "/images/andromeda.png"} alt={clickedObject?.name || "Andromeda"} fill className="object-cover" />
+        {/* Bottom Interactive Target Card */}
+        <div className="px-6 pb-28 md:pb-8 w-full pointer-events-auto flex justify-center md:justify-start">
+          <div className="glass-panel rounded-3xl p-5 w-full max-w-[400px] border border-white/10 bg-[#0B0F17]/80 backdrop-blur-2xl shadow-2xl relative overflow-hidden group hover:border-white/30 transition-colors cursor-pointer">
+            
+            <div className="absolute top-0 right-0 p-3">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
             </div>
-            <div className="flex-1">
-              <div className="flex justify-between items-start">
-                <h4 className="font-semibold text-lg md:text-xl truncate">{clickedObject?.name || 'Andromeda Galaxy'}</h4>
-                <span className="text-[#4ADE80] text-sm md:text-base font-bold bg-[#4ADE80]/10 px-2 py-0.5 md:px-3 md:py-1 rounded-md">97%</span>
+
+            <div className="flex gap-4 items-center">
+              <div className="w-16 h-16 rounded-xl overflow-hidden relative shrink-0 shadow-lg border border-white/10">
+                 <Image src="/images/andromeda.png" alt="Target" fill className="object-cover" />
               </div>
-              <p className="text-[#A2A9B3] text-sm md:text-base mt-1 truncate">{clickedObject?.type || 'M31 • Spiral Galaxy'}</p>
+              <div className="flex-1">
+                <div className="flex justify-between items-start">
+                  <h4 className="font-semibold text-lg">Andromeda Galaxy</h4>
+                </div>
+                <p className="text-[#A2A9B3] text-sm mt-0.5">M31 • Spiral Galaxy</p>
+                <div className="flex gap-2 mt-2">
+                  <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-[#A2A9B3]">RA: 00h 42m</span>
+                  <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-[#A2A9B3]">DEC: +41° 16'</span>
+                </div>
+              </div>
             </div>
-          </div>
-          
-          <div className="flex justify-between items-center border-t border-white/10 pt-4 md:pt-5 mt-1">
-            <div>
-              <p className="text-xs md:text-sm text-[#A2A9B3] mb-1">Best window</p>
-              <p className="text-sm md:text-base font-semibold">11:40 PM - 2:15 AM</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs md:text-sm text-[#A2A9B3] mb-1">Visibility</p>
-              <p className="text-sm md:text-base font-semibold flex items-center justify-end gap-2">
-                <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-[#4ADE80] shadow-[0_0_8px_rgba(74,222,128,0.6)]"></span>
-                High
-              </p>
-            </div>
+            
+            <button className="w-full mt-4 py-2.5 rounded-xl bg-[#D9A441] text-black font-bold text-sm hover:bg-white transition glow-amber flex items-center justify-center gap-2">
+              <Telescope size={16} />
+              Align Telescope to Target
+            </button>
           </div>
         </div>
+
       </div>
     </div>
   );
