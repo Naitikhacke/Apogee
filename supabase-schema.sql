@@ -1,43 +1,22 @@
--- 1. Create the profiles table
-create table public.profiles (
-  id uuid references auth.users on delete cascade not null primary key,
+-- Drop old profiles table if it exists
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user;
+drop table if exists public.profiles;
+
+-- Create our custom users table that bypasses Supabase Auth
+create table public.custom_users (
+  id uuid default gen_random_uuid() primary key,
+  email text unique not null,
+  password text not null, -- Note: Plain text for bypass testing
   full_name text,
   phone text,
-  email text,
-  avatar_url text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- 2. Set up Row Level Security (RLS)
-alter table public.profiles enable row level security;
+-- Enable basic RLS so anyone can insert/select (since we aren't using Supabase Auth anymore)
+alter table public.custom_users enable row level security;
 
--- Create policies so users can view and edit their own profiles
-create policy "Users can view their own profile."
-  on profiles for select
-  using ( auth.uid() = id );
-
-create policy "Users can update their own profile."
-  on profiles for update
-  using ( auth.uid() = id );
-
--- 3. Create a trigger to automatically create a profile when a new user signs up
-create function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = public
-as $$
-begin
-  insert into public.profiles (id, full_name, email, phone)
-  values (
-    new.id, 
-    new.raw_user_meta_data->>'full_name', 
-    new.email,
-    new.raw_user_meta_data->>'phone'
-  );
-  return new;
-end;
-$$;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+create policy "Allow public access for custom auth"
+  on custom_users for all
+  using (true)
+  with check (true);

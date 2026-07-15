@@ -36,9 +36,9 @@ export default function ProfileScreen({ user }: { user?: { name: string, email: 
                 Edit Profile
               </button>
               <button 
-                onClick={async () => {
-                  const { supabase } = await import('@/lib/supabase');
-                  await supabase.auth.signOut();
+                onClick={() => {
+                  localStorage.removeItem('apoggee_user');
+                  window.location.reload();
                 }}
                 className="px-6 py-2.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-sm font-medium"
               >

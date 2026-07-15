@@ -3,7 +3,7 @@ import { Sparkles, ArrowRight, Lock, Mail, User, Phone, AlertCircle } from 'luci
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
-export default function LoginScreen({ onLogin }: { onLogin: (user: { name: string; email: string; phone?: string }) => void }) {
+export default function LoginScreen({ onLogin }: { onLogin: (user: { id: string; name: string; email: string; phone?: string }) => void }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,41 +19,37 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: { name: strin
 
     try {
       if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              phone: phoneNumber,
-            }
-          }
-        });
+        // Direct database insert (Bypass Supabase Auth)
+        const { data, error } = await supabase
+          .from('custom_users')
+          .insert([
+            { email, password, full_name: fullName, phone: phoneNumber }
+          ])
+          .select()
+          .single();
         
-        if (error) throw error;
+        if (error) {
+          if (error.code === '23505') throw new Error('An account with this email already exists.');
+          throw error;
+        }
         
-        if (data.user) {
-          onLogin({
-            name: fullName,
-            email: data.user.email || email,
-            phone: phoneNumber
-          });
+        if (data) {
+          onLogin({ id: data.id, name: data.full_name, email: data.email, phone: data.phone });
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        // Direct database query for login (Bypass Supabase Auth)
+        const { data, error } = await supabase
+          .from('custom_users')
+          .select('*')
+          .eq('email', email)
+          .eq('password', password)
+          .single();
 
-        if (error) throw error;
-        
-        if (data.user) {
-          onLogin({
-            name: data.user.user_metadata?.full_name || email.split('@')[0],
-            email: data.user.email || email,
-            phone: data.user.user_metadata?.phone
-          });
+        if (error || !data) {
+          throw new Error('Invalid email or password.');
         }
+        
+        onLogin({ id: data.id, name: data.full_name, email: data.email, phone: data.phone });
       }
     } catch (err: any) {
       console.error('Auth error:', err);

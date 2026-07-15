@@ -13,42 +13,30 @@ import { supabase } from '@/lib/supabase';
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState('home');
-  const [user, setUser] = useState<{name: string, email: string, phone?: string} | null>(null);
+  const [user, setUser] = useState<{id: string, name: string, email: string, phone?: string} | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const fetchProfile = async (session: any) => {
-      if (!session?.user) {
-        setUser(null);
-        return;
-      }
-      
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-        
-      setUser({
-        name: data?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-        email: data?.email || session.user.email || '',
-        phone: data?.phone || session.user.user_metadata?.phone,
-      });
-    };
-
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      fetchProfile(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      fetchProfile(session);
-    });
-
-    return () => subscription.unsubscribe();
+    // Check custom local storage session
+    const storedUser = localStorage.getItem('apoggee_user');
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+      } catch (e) {}
+    }
+    setIsLoaded(true);
   }, []);
 
+  const handleLogin = (userData: {id: string, name: string, email: string, phone?: string}) => {
+    setUser(userData);
+    localStorage.setItem('apoggee_user', JSON.stringify(userData));
+  };
+
+  if (!isLoaded) return null;
+
   if (!user) {
-    return <LoginScreen onLogin={(userData) => setUser(userData)} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   const renderScreen = () => {
