@@ -1,0 +1,83 @@
+[
+  {
+    "id": "scn_login_001",
+    "screen_name": "LoginScreen",
+    "component_type": "button",
+    "label": "Login with myGov",
+    "accessibility_label": "Log in using your myGov account",
+    "hierarchy_level": 1,
+    "has_icon": true,
+    "icon_type": "lock",
+    "color_hex": "#00553A",
+    "status": "active",
+    "text_length": 15
+  },
+  {
+    "id": "scn_login_002",
+    "screen_name": "LoginScreen",
+    "component_type": "input",
+    "label": "Tax File Number (TFN)",
+    "accessibility_label": "Enter your 9 digit Tax File Number",
+    "hierarchy_level": 2,
+    "has_icon": false,
+    "is_required": true,
+    "input_type": "numeric",
+    "status": "active"
+  },
+  {
+    "id": "scn_home_001",
+    "screen_name": "DashboardScreen",
+    "component_type": "card",
+    "label": "Your Estimated Return",
+    "content_text": "Based on your deductions, your estimated return is $1,250.00.",
+    "hierarchy_level": 1,
+    "status": "active",
+    "action_url": "/tax-return/summary"
+  },
+  {
+    "id": "scn_home_002",
+    "screen_name": "DashboardScreen",
+    "component_type": "button",
+    "label": "Lodge Return",
+    "accessibility_label": "Proceed to lodge your tax return for the 2025-2026 financial year",
+    "hierarchy_level": 2,
+    "color_hex": "#000000",
+    "status": "active"
+  },
+  {
+    "id": "scn_deduct_001",
+    "screen_name": "myDeductionsScreen",
+    "component_type": "input",
+    "label": "Work-related expenses",
+    "accessibility_label": "Enter total work related expenses in AUD",
+    "hierarchy_level": 2,
+    "input_type": "currency",
+    "status": "active"
+  },
+  {
+    "id": "scn_deduct_002",
+    "screen_name": "myDeductionsScreen",
+    "component_type": "tooltip",
+    "label": "Help",
+    "content_text": "Includes uniforms, travel, and home office expenses. Must have receipts if over $300.",
+    "hierarchy_level": 3,
+    "status": "active"
+  },
+  {
+    "id": "err_001",
+    "screen_name": "Unknown",
+    "component_type": "NULL",
+    "label": "",
+    "hierarchy_level": -1,
+    "status": "deprecated"
+  },
+  {
+    "id": "scn_super_001",
+    "screen_name": "SuperannuationScreen",
+    "component_type": "text",
+    "label": "Total Super Balance",
+    "content_text": "Your combined superannuation balance across all funds.",
+    "hierarchy_level": 1,
+    "status": "active"
+  }
+]
