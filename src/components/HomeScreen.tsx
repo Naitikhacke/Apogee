@@ -11,6 +11,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
   const [clearSkiesPercent, setClearSkiesPercent] = useState(0);
   const [sunrise, setSunrise] = useState('--:--');
   const [sunset, setSunset] = useState('--:--');
+  const [temperature, setTemperature] = useState('--');
+  const [weatherDesc, setWeatherDesc] = useState('Weather');
   const [hourlyClearSkies, setHourlyClearSkies] = useState<number[]>([0,0,0,0,0,0,0]);
   const [hourlyLabels, setHourlyLabels] = useState<string[]>(['','','','','','','']);
 
@@ -54,13 +56,27 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
               setJupiterRise(astroData.jupiter.rise);
 
               // 3. Fetch real-time weather/astronomy data from Open-Meteo
-              const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
+              const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
               const weatherData = await weatherResponse.json();
 
               if (weatherData && weatherData.current) {
                 // Invert cloud cover to get clear skies percentage
                 const currentCloud = weatherData.current.cloud_cover;
                 setClearSkiesPercent(100 - currentCloud);
+                
+                // Weather Code Mapping
+                const code = weatherData.current.weather_code;
+                let desc = 'Clear';
+                if (code > 0 && code <= 3) desc = 'Cloudy';
+                else if (code > 3 && code <= 48) desc = 'Fog';
+                else if (code > 48 && code <= 57) desc = 'Drizzle';
+                else if (code > 57 && code <= 67) desc = 'Rain';
+                else if (code > 67 && code <= 77) desc = 'Snow';
+                else if (code > 77 && code <= 82) desc = 'Showers';
+                else if (code > 82) desc = 'Stormy';
+                
+                setWeatherDesc(desc);
+                setTemperature(Math.round(weatherData.current.temperature_2m).toString());
 
                 // Format times
                 const formatTime = (isoString: string) => {
@@ -186,8 +202,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                 </div>
                 <div className="w-px h-10 md:h-12 bg-white/10" />
                 <div className="flex flex-col items-center">
-                  <span className="text-lg md:text-2xl font-bold">21.8</span>
-                  <span className="text-[#A2A9B3] text-xs md:text-sm">SQM (Est.)</span>
+                  <span className="text-lg md:text-2xl font-bold">{isLoadingLocation ? '--' : temperature}°<span className="text-xs md:text-sm font-normal">C</span></span>
+                  <span className="text-[#A2A9B3] text-xs md:text-sm">{isLoadingLocation ? 'Loading' : weatherDesc}</span>
                 </div>
                 <div className="w-px h-10 md:h-12 bg-white/10" />
                 <div className="flex flex-col items-center">
