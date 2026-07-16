@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Bell, Star, Sparkles, Moon, Loader2, Info } from 'lucide-react';
 import Image from 'next/image';
-import { getAstronomyData } from '@/utils/astronomy';
 
 export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: string) => void }) {
   const [locationName, setLocationName] = useState('Locating...');
@@ -46,14 +45,17 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
               }
 
               // 2. Local Astronomy Engine Data (Real-time Moon & Planets)
-              const astroData = getAstronomyData(latitude, longitude);
-              setMoonData({
-                illum: astroData.moon.illumination,
-                age: astroData.moon.age,
-                rise: astroData.moon.rise,
-                set: astroData.moon.set
-              });
-              setJupiterRise(astroData.jupiter.rise);
+              const astroResponse = await fetch(`/api/astronomy?latitude=${latitude}&longitude=${longitude}`);
+              if (astroResponse.ok) {
+                const astroData = await astroResponse.json();
+                setMoonData({
+                  illum: astroData.moon.illumination,
+                  age: astroData.moon.age,
+                  rise: astroData.moon.rise,
+                  set: astroData.moon.set
+                });
+                setJupiterRise(astroData.jupiter.rise);
+              }
 
               // 3. Fetch real-time weather/astronomy data from Open-Meteo
               const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
