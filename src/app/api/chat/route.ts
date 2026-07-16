@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     
     // The model configuration - FIXED: updated to the correct model name
     const model = genAI.getGenerativeModel({
-      model: 'gemini-3.0-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: { role: 'system', parts: [{ text: systemInstruction }] }
     });
 
