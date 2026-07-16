@@ -15,11 +15,11 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
   const [hourlyClearSkies, setHourlyClearSkies] = useState<number[]>([0,0,0,0,0,0,0]);
   const [hourlyLabels, setHourlyLabels] = useState<string[]>(['','','','','','','']);
 
-  // NASA & Astronomy Data
   const [apodImage, setApodImage] = useState('/images/milky_way.png');
   const [apodTitle, setApodTitle] = useState('Milky Way core rises at 11:42 PM');
   const [moonData, setMoonData] = useState({ illum: 0, age: '--', rise: '--:--', set: '--:--' });
   const [jupiterRise, setJupiterRise] = useState('--:--');
+  const [recommendations, setRecommendations] = useState<any[]>([]);
 
   useEffect(() => {
     const requestLocation = () => {
@@ -55,6 +55,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                   set: astroData.moon.set
                 });
                 setJupiterRise(astroData.jupiter.rise);
+                setRecommendations(astroData.recommendations || []);
               }
 
               // 3. Fetch real-time weather/astronomy data from Open-Meteo
@@ -310,41 +311,38 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                 </div>
                 
                 <div className="flex flex-col gap-4">
-                  <div className="glass-panel rounded-3xl p-5 flex items-center md:items-start lg:items-center gap-4 border border-[#4ADE80]/30 relative overflow-hidden group hover:border-[#4ADE80]/60 transition-colors cursor-pointer">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#A855F7]/10 blur-2xl rounded-full group-hover:bg-[#A855F7]/20 transition-colors"></div>
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden relative shrink-0">
-                       <Image src="/images/andromeda.png" alt="Andromeda" fill className="object-cover" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-semibold text-[15px] md:text-base">Jupiter Visibility</h4>
-                        <span className="text-[#4ADE80] text-xs font-bold bg-[#4ADE80]/10 px-2 py-0.5 rounded-md">Real-time</span>
+                  {recommendations.length > 0 ? (
+                    recommendations.map((rec) => (
+                      <div 
+                        key={rec.id} 
+                        onClick={() => onNavigate?.('skymap')}
+                        className="glass-panel rounded-3xl p-5 flex items-center gap-4 border border-white/5 relative overflow-hidden group hover:border-[#D9A441]/40 transition-colors cursor-pointer"
+                      >
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#D9A441]/5 blur-2xl rounded-full group-hover:bg-[#D9A441]/10 transition-colors"></div>
+                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden relative shrink-0 bg-[#161D2B]">
+                          <Image src={rec.img || '/images/andromeda.png'} alt={rec.name} fill className="object-cover" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <h4 className="font-semibold text-[15px] md:text-base">{rec.name}</h4>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${rec.isVisible ? 'text-[#4ADE80] bg-[#4ADE80]/10' : 'text-[#A2A9B3] bg-white/5'}`}>
+                              {rec.isVisible ? `${rec.rating}% View` : 'Below Horizon'}
+                            </span>
+                          </div>
+                          <p className="text-[#A2A9B3] text-xs md:text-sm mt-0.5 mb-1">{rec.catalog}</p>
+                          <p className="text-[#A2A9B3] text-xs leading-relaxed flex flex-col">
+                            <span className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${rec.isVisible ? 'bg-[#4ADE80]' : 'bg-red-500'}`}></span>
+                              {rec.isVisible ? `Altitude: ${rec.altitude}° (Az: ${rec.azimuth}°)` : rec.rise ? `Rises at ${rec.rise}` : 'Not visible today'}
+                            </span>
+                            <span className="ml-3 mt-0.5">~ {rec.equipment}</span>
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[#A2A9B3] text-xs md:text-sm mt-1 mb-1">Planet</p>
-                      <p className="text-[#A2A9B3] text-xs leading-relaxed flex flex-col">
-                        <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#D9A441]"></span>Rises at {jupiterRise}</span>
-                        <span className="ml-3 mt-0.5">~ Any telephoto lens</span>
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Additional desktop suggestion */}
-                  <div className="hidden md:flex glass-panel rounded-3xl p-5 items-center lg:items-center gap-4 border border-white/5 relative overflow-hidden group hover:border-white/20 transition-colors cursor-pointer">
-                    <div className="w-20 h-20 rounded-xl overflow-hidden relative shrink-0 bg-[#161D2B] flex items-center justify-center">
-                       <Star size={32} className="text-[#A2A9B3]" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-semibold text-base text-white/90">Orion Nebula</h4>
-                        <span className="text-[#D9A441] text-xs font-bold bg-[#D9A441]/10 px-2 py-0.5 rounded-md">82%</span>
-                      </div>
-                      <p className="text-[#A2A9B3] text-sm mt-1 mb-1">M42</p>
-                      <p className="text-[#A2A9B3] text-xs leading-relaxed flex flex-col">
-                        <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#D9A441]"></span>3:10 AM - 5:20 AM</span>
-                        <span className="ml-3 mt-0.5">~ 200mm+ lens</span>
-                      </p>
-                    </div>
-                  </div>
+                    ))
+                  ) : (
+                    <p className="text-[#A2A9B3] text-sm text-center py-6">Calculating best targets right now...</p>
+                  )}
                 </div>
               </div>
             </div>

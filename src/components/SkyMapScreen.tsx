@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Filter, ScanLine, Telescope, Compass, Crosshair, Clock } from 'lucide-react';
+import { Search, Filter, ScanLine, Telescope, Compass, Crosshair, Clock, Star } from 'lucide-react';
 import Image from 'next/image';
 
 export default function SkyMapScreen() {
@@ -7,6 +7,9 @@ export default function SkyMapScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [time, setTime] = useState(new Date());
   const [location, setLocation] = useState({ lat: 0, lon: 0, loaded: false });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTargetData, setActiveTargetData] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState('Zenith');
 
   // Live Real-Time Clock
@@ -34,6 +37,43 @@ export default function SkyMapScreen() {
       );
     }
   }, []);
+
+  // Load default target Andromeda
+  useEffect(() => {
+    if (location.loaded) {
+      fetch(`/api/astronomy?latitude=${location.lat}&longitude=${location.lon}&target=andromeda`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.target) {
+            setActiveTargetData(data.target);
+          }
+        });
+    }
+  }, [location.loaded, location.lat, location.lon]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim() || !location.loaded) return;
+    
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/astronomy?latitude=${location.lat}&longitude=${location.lon}&target=${encodeURIComponent(searchQuery)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.target) {
+          setActiveTargetData(data.target);
+          
+          // Update iframe to center on searched target
+          const targetObj = data.target.name;
+          setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=${location.lon}&latitude=${location.lat}&projection=stereo&constellations=true&constellationlabels=true&meteorshowers=true&showplanets=true&live=true&az=0&keyboard=false&mouse=true&color=0B0F17&starcolor=ffffff&showdate=false&showposition=false&object=${encodeURIComponent(targetObj)}`);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0B0F17] text-white relative overflow-hidden">
@@ -89,19 +129,21 @@ export default function SkyMapScreen() {
           </div>
 
           {/* Search & Filters */}
-          <div className="flex gap-3 pointer-events-auto max-w-md mt-2">
+          <form onSubmit={handleSearch} className="flex gap-3 pointer-events-auto max-w-md mt-2 w-full">
             <div className="flex-1 glass rounded-full flex items-center px-4 py-3 border border-white/10 hover:border-white/30 transition-colors bg-[#0B0F17]/70 backdrop-blur-md focus-within:border-[#D9A441]">
               <Search size={18} className="text-[#A2A9B3] mr-3" />
               <input 
                 type="text" 
-                placeholder="Search targets..." 
+                placeholder="Search planets/DSOs (e.g. Orion, Jupiter)..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-transparent border-none outline-none text-sm w-full text-white placeholder-[#A2A9B3]"
               />
             </div>
-            <button className="w-12 h-12 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-colors border border-white/10 bg-[#0B0F17]/70 backdrop-blur-md">
-              <Filter size={20} />
+            <button type="submit" className="w-12 h-12 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-colors border border-white/10 bg-[#0B0F17]/70 backdrop-blur-md shrink-0">
+              {isSearching ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> : <Search size={20} />}
             </button>
-          </div>
+          </form>
         </div>
 
         {/* Side Controls */}
@@ -117,35 +159,55 @@ export default function SkyMapScreen() {
         </div>
 
         {/* Bottom Interactive Target Card */}
-        <div className="px-6 pb-28 md:pb-8 w-full pointer-events-auto flex justify-center md:justify-start">
-          <div className="glass-panel rounded-3xl p-5 w-full max-w-[400px] border border-white/10 bg-[#0B0F17]/80 backdrop-blur-2xl shadow-2xl relative overflow-hidden group hover:border-white/30 transition-colors cursor-pointer">
-            
-            <div className="absolute top-0 right-0 p-3">
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
-            </div>
+        {activeTargetData && (
+          <div className="px-6 pb-28 md:pb-8 w-full pointer-events-auto flex justify-center md:justify-start">
+            <div className="glass-panel rounded-3xl p-5 w-full max-w-[400px] border border-white/10 bg-[#0B0F17]/85 backdrop-blur-2xl shadow-2xl relative overflow-hidden group hover:border-white/30 transition-colors cursor-pointer">
+              
+              <div className="absolute top-0 right-0 p-3">
+                <div className="w-2 h-2 rounded-full bg-[#4ADE80] animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]"></div>
+              </div>
 
-            <div className="flex gap-4 items-center">
-              <div className="w-16 h-16 rounded-xl overflow-hidden relative shrink-0 shadow-lg border border-white/10">
-                 <Image src="/images/andromeda.png" alt="Target" fill className="object-cover" />
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-semibold text-lg">Andromeda Galaxy</h4>
+              <div className="flex gap-4 items-center">
+                <div className="w-16 h-16 rounded-xl overflow-hidden relative shrink-0 shadow-lg border border-white/10 bg-[#161D2B] flex items-center justify-center">
+                  <Star size={24} className="text-[#D9A441]" />
                 </div>
-                <p className="text-[#A2A9B3] text-sm mt-0.5">M31 • Spiral Galaxy</p>
-                <div className="flex gap-2 mt-2">
-                  <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-[#A2A9B3]">RA: 00h 42m</span>
-                  <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-[#A2A9B3]">DEC: +41° 16'</span>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-semibold text-lg">{activeTargetData.name}</h4>
+                  </div>
+                  <p className="text-[#A2A9B3] text-xs mt-0.5">{activeTargetData.type} • {activeTargetData.equipment}</p>
+                  <p className="text-[#4ADE80] text-xs font-semibold mt-1">Best Window: {activeTargetData.bestWindow}</p>
                 </div>
               </div>
+              
+              {/* Location Recommender */}
+              {activeTargetData.recommendedLocations && activeTargetData.recommendedLocations.length > 0 && (
+                <div className="mt-4 border-t border-white/5 pt-3">
+                  <h5 className="text-[10px] font-bold text-[#D9A441] mb-2 uppercase tracking-widest">Recommended Dark Sky Spots</h5>
+                  <div className="flex flex-col gap-2">
+                    {activeTargetData.recommendedLocations.map((spot: any) => (
+                      <div key={spot.id} className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors px-3 py-2 rounded-xl text-[11px]">
+                        <div>
+                          <p className="font-semibold text-white/95">{spot.name}</p>
+                          <p className="text-[9px] text-[#A2A9B3]">{spot.region}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-[#4ADE80]">Bortle {spot.bortle}</p>
+                          <p className="text-[9px] text-[#A2A9B3]">{spot.distance} km away</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <button className="w-full mt-4 py-2.5 rounded-xl bg-[#D9A441] text-black font-bold text-sm hover:bg-white transition glow-amber flex items-center justify-center gap-2">
+                <Telescope size={16} />
+                Align Telescope to Target
+              </button>
             </div>
-            
-            <button className="w-full mt-4 py-2.5 rounded-xl bg-[#D9A441] text-black font-bold text-sm hover:bg-white transition glow-amber flex items-center justify-center gap-2">
-              <Telescope size={16} />
-              Align Telescope to Target
-            </button>
           </div>
-        </div>
+        )}
 
       </div>
     </div>

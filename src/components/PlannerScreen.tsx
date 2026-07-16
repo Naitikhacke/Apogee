@@ -16,6 +16,8 @@ export default function PlannerScreen() {
   const [weekDays, setWeekDays] = useState<Date[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [location, setLocation] = useState({ lat: 0, lon: 0, loaded: false });
+  const [dailyDetails, setDailyDetails] = useState<any[]>([]);
   
   // New Plan Form State
   const [newTitle, setNewTitle] = useState('');
@@ -27,9 +29,9 @@ export default function PlannerScreen() {
     setMounted(true);
     
     // Generate current week starting from Sunday
-    const getWeek = () => {
+    const getWeek = (refDate = new Date()) => {
       const days = [];
-      const current = new Date();
+      const current = new Date(refDate);
       current.setDate(current.getDate() - current.getDay()); // Sunday
       for (let i = 0; i < 7; i++) {
         days.push(new Date(current));
@@ -37,7 +39,31 @@ export default function PlannerScreen() {
       }
       return days;
     };
-    setWeekDays(getWeek());
+    const daysOfCurrentWeek = getWeek();
+    setWeekDays(daysOfCurrentWeek);
+
+    // Get location and fetch 7 days of calculations
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          setLocation({ lat, lon, loaded: true });
+          
+          const weekStartStr = daysOfCurrentWeek[0].toISOString().split('T')[0];
+          try {
+            const res = await fetch(`/api/astronomy?latitude=${lat}&longitude=${lon}&days=7&startDate=${weekStartStr}`);
+            if (res.ok) {
+              const data = await res.json();
+              setDailyDetails(data.days || []);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        },
+        (error) => console.warn('Location access denied in PlannerScreen.')
+      );
+    }
 
     // Load from local storage
     const saved = localStorage.getItem('apoggee_plans');
@@ -114,14 +140,26 @@ export default function PlannerScreen() {
               <div className="flex justify-between items-center">
                 {weekDays.map((day, i) => {
                   const active = isSameDay(day, selectedDate);
+                  const hasDetails = dailyDetails[i];
+                  let borderClass = 'border border-transparent';
+                  if (hasDetails) {
+                    if (hasDetails.skyQuality === 'Excellent') borderClass = 'border border-[#4ADE80]/30';
+                    else if (hasDetails.skyQuality === 'Good') borderClass = 'border border-[#D9A441]/30';
+                  }
+                  
                   return (
                     <div 
                       key={i} 
                       onClick={() => setSelectedDate(day)}
-                      className={`flex flex-col items-center justify-center w-11 h-14 md:w-16 md:h-20 rounded-full cursor-pointer transition-transform hover:scale-110 ${active ? 'bg-[#D9A441] text-black glow-amber' : 'text-[#A2A9B3] hover:bg-white/10'}`}
+                      className={`flex flex-col items-center justify-center w-11 h-16 md:w-16 md:h-24 rounded-2xl cursor-pointer transition-transform hover:scale-105 ${active ? 'bg-[#D9A441] text-black glow-amber' : `text-[#A2A9B3] hover:bg-white/10 ${borderClass}`}`}
                     >
                       <span className={`text-[10px] md:text-xs font-semibold mb-1 ${active ? 'text-black/70' : 'text-[#A2A9B3]'}`}>{getDayName(day)}</span>
-                      <span className={`text-lg md:text-2xl font-bold ${active ? 'text-black' : 'text-white'}`}>{day.getDate()}</span>
+                      <span className={`text-base md:text-xl font-bold ${active ? 'text-black' : 'text-white'}`}>{day.getDate()}</span>
+                      {hasDetails && (
+                        <span className={`text-[9px] font-mono mt-1 ${active ? 'text-black/60' : 'text-[#4ADE80]'}`}>
+                          {hasDetails.moon.illumination}%
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -129,46 +167,55 @@ export default function PlannerScreen() {
             </div>
 
             {/* Info Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
-              {/* Moon Phase */}
-              <div className="glass-panel rounded-3xl p-5 md:p-6 relative overflow-hidden group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
-                <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4">Moon Phase</h4>
-                <div className="flex gap-2 relative z-10">
-                  <div className="flex flex-col">
-                    <span className="text-xl md:text-3xl font-bold">Realtime</span>
-                    <span className="text-[10px] md:text-xs text-[#A2A9B3] mt-1">Updates nightly</span>
-                  </div>
-                  <div className="absolute right-[-20px] md:right-[-10px] top-0 w-16 h-16 md:w-20 md:h-20 group-hover:scale-110 transition-transform">
-                     <Image src="/images/moon.png" alt="Moon" fill className="object-contain" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Weather */}
-              <div className="glass-panel rounded-3xl p-5 md:p-6 group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
-                <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4">Condition</h4>
-                <div className="flex items-center gap-3 md:gap-4">
-                  <CloudSun size={28} className="text-white md:w-10 md:h-10" />
-                  <div className="flex flex-col">
-                    <span className="text-xl md:text-3xl font-bold">Clear</span>
-                    <span className="text-[10px] md:text-xs text-[#A2A9B3] mt-1">Est. forecast</span>
-                  </div>
-                </div>
-              </div>
+            {(() => {
+              const selectedDayIndex = weekDays.findIndex(d => isSameDay(d, selectedDate));
+              const selectedDayDetail = selectedDayIndex !== -1 ? dailyDetails[selectedDayIndex] : null;
               
-              {/* Bortle Class */}
-              <div className="glass-panel rounded-3xl p-5 md:p-6 col-span-2 md:col-span-1 group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
-                <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4 text-center md:text-left">GPS Location</h4>
-                <div className="flex flex-row md:flex-col items-center justify-center md:justify-start gap-4 md:gap-0">
-                  <div className="flex items-center justify-center relative w-16 h-8 md:w-full md:h-12 md:mb-4">
-                     <Map size={24} className="text-[#4ADE80]" />
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
+                  {/* Moon Phase */}
+                  <div className="glass-panel rounded-3xl p-5 md:p-6 relative overflow-hidden group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
+                    <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4">Moon Phase</h4>
+                    <div className="flex gap-2 relative z-10">
+                      <div className="flex flex-col">
+                        <span className="text-xl md:text-2xl font-bold">{selectedDayDetail ? `${selectedDayDetail.moon.illumination}%` : 'Loading...'}</span>
+                        <span className="text-[10px] md:text-xs text-[#A2A9B3] mt-1">{selectedDayDetail ? `Age: ${selectedDayDetail.moon.age} days` : 'Calculating phase'}</span>
+                      </div>
+                      <div className="absolute right-[-20px] md:right-[-10px] top-0 w-16 h-16 md:w-20 md:h-20 group-hover:scale-110 transition-transform">
+                         <Image src="/images/moon.png" alt="Moon" fill className="object-contain" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-left md:text-center">
-                    <span className="text-[10px] md:text-xs text-[#A2A9B3]">Local<br/>Coordinates</span>
+
+                  {/* Weather */}
+                  <div className="glass-panel rounded-3xl p-5 md:p-6 group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
+                    <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4">Condition</h4>
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <CloudSun size={28} className="text-white md:w-10 md:h-10" />
+                      <div className="flex flex-col">
+                        <span className="text-base md:text-xl font-bold">{selectedDayDetail ? selectedDayDetail.skyQuality : 'Loading...'}</span>
+                        <span className="text-[10px] md:text-xs text-[#A2A9B3] mt-1">{selectedDayDetail ? `Sunset: ${selectedDayDetail.sun.sunset}` : 'Finding sunset'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Bortle Class */}
+                  <div className="glass-panel rounded-3xl p-5 md:p-6 col-span-2 md:col-span-1 group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
+                    <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4 text-center md:text-left">GPS Location</h4>
+                    <div className="flex flex-row md:flex-col items-center justify-center md:justify-start gap-4 md:gap-0">
+                      <div className="flex items-center justify-center relative w-16 h-8 md:w-full md:h-12 md:mb-4">
+                         <Map size={24} className="text-[#4ADE80]" />
+                      </div>
+                      <div className="text-left md:text-center">
+                        <span className="text-[10px] md:text-xs text-white/90 font-mono">{location.loaded ? `${location.lat.toFixed(2)}°, ${location.lon.toFixed(2)}°` : 'Locating...'}</span>
+                        <br/>
+                        <span className="text-[9px] text-[#A2A9B3]">{location.loaded ? 'GPS Signal OK' : 'No Coordinates'}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Upcoming Events */}
