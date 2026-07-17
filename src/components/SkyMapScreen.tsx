@@ -17,21 +17,39 @@ export default function SkyMapScreen() {
 
   // GPS Location & Map Initialization
   useEffect(() => {
+    const handleLocation = (lat: number, lon: number) => {
+      setLocation({ lat, lon, loaded: true });
+      setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=${lon}&latitude=${lat}&projection=stereo&constellations=true&constellationlabels=true&meteorshowers=true&showplanets=true&live=true&az=0&keyboard=false&mouse=true&color=0B0F17&starcolor=ffffff&showdate=false&showposition=false`);
+    };
+
+    const handleFallback = async () => {
+      try {
+        const ipRes = await fetch('https://ipapi.co/json/');
+        const ipData = await ipRes.json();
+        if (ipData.latitude && ipData.longitude) {
+          handleLocation(ipData.latitude, ipData.longitude);
+          return;
+        }
+      } catch (ipError) {
+        console.error("IP fallback also failed", ipError);
+      }
+      console.warn('Location blocked or failed, using default coordinates.');
+      setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=0&latitude=0&projection=stereo&constellations=true&constellationlabels=true&live=true&color=0B0F17`);
+    };
+
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          setLocation({ lat, lon, loaded: true });
-          
-          // Initialize observatory-grade live map
-          setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=${lon}&latitude=${lat}&projection=stereo&constellations=true&constellationlabels=true&meteorshowers=true&showplanets=true&live=true&az=0&keyboard=false&mouse=true&color=0B0F17&starcolor=ffffff&showdate=false&showposition=false`);
+          handleLocation(position.coords.latitude, position.coords.longitude);
         },
         (error) => {
-          console.warn('Location blocked, using default coordinates.');
-          setMapUrl(`https://virtualsky.lco.global/embed/index.html?longitude=0&latitude=0&projection=stereo&constellations=true&constellationlabels=true&live=true&color=0B0F17`);
-        }
+          console.warn('Location blocked, trying IP fallback.');
+          handleFallback();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
+    } else {
+      handleFallback();
     }
   }, []);
 

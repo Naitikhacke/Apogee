@@ -24,101 +24,127 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
 
   useEffect(() => {
     const requestLocation = () => {
-      if ('geolocation' in navigator) {
-        setIsLoadingLocation(true);
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            try {
-              const { latitude, longitude } = position.coords;
-              
-              // 1. Fetch location name
-              const geoResponse = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
-              const geoData = await geoResponse.json();
-              const city = geoData.city || geoData.locality;
-              const region = geoData.principalSubdivision || geoData.countryCode;
-              
-              if (city && region) {
-                setLocationName(`${city}, ${region}`);
-              } else if (city) {
-                setLocationName(city);
-              } else {
-                setLocationName(`${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`);
-              }
+      setIsLoadingLocation(true);
 
-              // 2. Local Astronomy Engine Data (Real-time Moon & Planets)
-              const astroData = getAstronomyData(latitude, longitude);
-              setMoonData({
-                illum: astroData.moon.illumination,
-                age: astroData.moon.age,
-                rise: astroData.moon.rise,
-                set: astroData.moon.set
-              });
-              setJupiterRise(astroData.jupiter.rise);
+      const processLocationData = async (latitude: number, longitude: number, fallbackCity?: string, fallbackRegion?: string) => {
+        try {
+          // 1. Fetch location name
+          let city = fallbackCity;
+          let region = fallbackRegion;
+          
+          if (!city) {
+            const geoResponse = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+            const geoData = await geoResponse.json();
+            city = geoData.city || geoData.locality;
+            region = geoData.principalSubdivision || geoData.countryCode;
+          }
+          
+          if (city && region) {
+            setLocationName(`${city}, ${region}`);
+          } else if (city) {
+            setLocationName(city);
+          } else {
+            setLocationName(`${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`);
+          }
 
-              // 3. Fetch real-time weather/astronomy data from Open-Meteo
-              const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
-              const weatherData = await weatherResponse.json();
+          // 2. Local Astronomy Engine Data (Real-time Moon & Planets)
+          const astroData = getAstronomyData(latitude, longitude);
+          setMoonData({
+            illum: astroData.moon.illumination,
+            age: astroData.moon.age,
+            rise: astroData.moon.rise,
+            set: astroData.moon.set
+          });
+          setJupiterRise(astroData.jupiter.rise);
 
-              if (weatherData && weatherData.current) {
-                // Invert cloud cover to get clear skies percentage
-                const currentCloud = weatherData.current.cloud_cover;
-                setClearSkiesPercent(100 - currentCloud);
-                
-                // Weather Code Mapping
-                const code = weatherData.current.weather_code;
-                let desc = 'Clear';
-                if (code > 0 && code <= 3) desc = 'Cloudy';
-                else if (code > 3 && code <= 48) desc = 'Fog';
-                else if (code > 48 && code <= 57) desc = 'Drizzle';
-                else if (code > 57 && code <= 67) desc = 'Rain';
-                else if (code > 67 && code <= 77) desc = 'Snow';
-                else if (code > 77 && code <= 82) desc = 'Showers';
-                else if (code > 82) desc = 'Stormy';
-                
-                setWeatherDesc(desc);
-                setTemperature(Math.round(weatherData.current.temperature_2m).toString());
+          // 3. Fetch real-time weather/astronomy data from Open-Meteo
+          const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
+          const weatherData = await weatherResponse.json();
 
-                // Format times
-                const formatTime = (isoString: string) => {
-                  const date = new Date(isoString);
-                  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-                };
-                
-                setSunrise(formatTime(weatherData.daily.sunrise[0]));
-                setSunset(formatTime(weatherData.daily.sunset[0]));
+          if (weatherData && weatherData.current) {
+            // Invert cloud cover to get clear skies percentage
+            const currentCloud = weatherData.current.cloud_cover;
+            setClearSkiesPercent(100 - currentCloud);
+            
+            // Weather Code Mapping
+            const code = weatherData.current.weather_code;
+            let desc = 'Clear';
+            if (code > 0 && code <= 3) desc = 'Cloudy';
+            else if (code > 3 && code <= 48) desc = 'Fog';
+            else if (code > 48 && code <= 57) desc = 'Drizzle';
+            else if (code > 57 && code <= 67) desc = 'Rain';
+            else if (code > 67 && code <= 77) desc = 'Snow';
+            else if (code > 77 && code <= 82) desc = 'Showers';
+            else if (code > 82) desc = 'Stormy';
+            
+            setWeatherDesc(desc);
+            setTemperature(Math.round(weatherData.current.temperature_2m).toString());
 
-                // Get next 7 hours of clear skies
-                const currentHourStr = weatherData.current.time;
-                const currentIndex = weatherData.hourly.time.findIndex((t: string) => t >= currentHourStr);
-                
-                if (currentIndex !== -1) {
-                  const next7HoursCloud = weatherData.hourly.cloud_cover.slice(currentIndex, currentIndex + 7);
-                  setHourlyClearSkies(next7HoursCloud.map((c: number) => 100 - c));
-                  
-                  const next7Times = weatherData.hourly.time.slice(currentIndex, currentIndex + 7);
-                  setHourlyLabels(next7Times.map((t: string) => {
-                    const date = new Date(t);
-                    return date.toLocaleTimeString([], { hour: 'numeric', hour12: true }).replace(/ [AP]M/i, (m) => m[0].toLowerCase() + m[1].toLowerCase());
-                  }));
-                }
-              }
-            } catch (error) {
-              console.error("Error fetching real-time data:", error);
-              setLocationName('Location Error');
-            } finally {
-              setIsLoadingLocation(false);
+            // Format times
+            const formatTime = (isoString: string) => {
+              if (!isoString) return '--:--';
+              const date = new Date(isoString);
+              return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            };
+            
+            if (weatherData.daily?.sunrise?.[0]) {
+              setSunrise(formatTime(weatherData.daily.sunrise[0]));
             }
+            if (weatherData.daily?.sunset?.[0]) {
+              setSunset(formatTime(weatherData.daily.sunset[0]));
+            }
+
+            // Get next 7 hours of clear skies
+            const currentHourStr = weatherData.current.time;
+            const currentIndex = weatherData.hourly.time.findIndex((t: string) => t >= currentHourStr);
+            
+            if (currentIndex !== -1) {
+              const next7HoursCloud = weatherData.hourly.cloud_cover.slice(currentIndex, currentIndex + 7);
+              setHourlyClearSkies(next7HoursCloud.map((c: number) => 100 - c));
+              
+              const next7Times = weatherData.hourly.time.slice(currentIndex, currentIndex + 7);
+              setHourlyLabels(next7Times.map((t: string) => {
+                const date = new Date(t);
+                return date.toLocaleTimeString([], { hour: 'numeric', hour12: true }).replace(/ [AP]M/i, (m) => m[0].toLowerCase() + m[1].toLowerCase());
+              }));
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching real-time data:", error);
+          setLocationName('Location Error');
+        } finally {
+          setIsLoadingLocation(false);
+        }
+      };
+
+      const handleFallback = async () => {
+        try {
+          const ipRes = await fetch('https://ipapi.co/json/');
+          const ipData = await ipRes.json();
+          if (ipData.latitude && ipData.longitude) {
+            await processLocationData(ipData.latitude, ipData.longitude, ipData.city, ipData.region);
+            return;
+          }
+        } catch (ipError) {
+          console.error("IP fallback also failed", ipError);
+        }
+        setLocationName('Location Denied');
+        setIsLoadingLocation(false);
+      };
+
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            processLocationData(position.coords.latitude, position.coords.longitude);
           },
           (error) => {
-            console.error("Error getting location:", error);
-            setLocationName('Location Denied');
-            setIsLoadingLocation(false);
+            console.error("Error getting location, trying fallback:", error);
+            handleFallback();
           },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } else {
-        setLocationName('Geolocation unsupported');
-        setIsLoadingLocation(false);
+        handleFallback();
       }
     };
 
