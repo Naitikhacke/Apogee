@@ -278,7 +278,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                 </div>
 
                 {/* Sky Conditions */}
-                <div className="glass-panel rounded-3xl p-6 h-full">
+                <div className="glass-panel rounded-3xl p-6 h-full flex flex-col">
                   <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2">
                       <Star size={18} className="text-[#D9A441]" />
@@ -297,16 +297,16 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                     )}
                   </div>
                   
-                  <div className="flex justify-between items-end mt-auto h-20">
+                  <div className="flex justify-between items-end mt-auto pt-2">
                     {hourlyClearSkies.map((h, i) => (
                       <div key={i} className="flex flex-col items-center gap-2">
-                        <div className="w-6 md:w-8 bg-[#161D2B] rounded-full flex items-end justify-center h-20 md:h-24 relative hover:bg-[#1c2436] transition-colors cursor-pointer group">
+                        <div className="w-5 md:w-7 lg:w-8 bg-[#161D2B] rounded-full flex items-end justify-center h-16 md:h-20 relative hover:bg-[#1c2436] transition-colors cursor-pointer group">
                           <div 
                             className="w-full bg-[#D9A441] rounded-full absolute bottom-0 group-hover:glow-amber transition-shadow" 
                             style={{height: isLoadingLocation ? '10%' : `${h}%`}}
                           ></div>
                         </div>
-                        <span className="text-[10px] md:text-xs text-[#A2A9B3]">
+                        <span className="text-[10px] md:text-xs text-[#A2A9B3] whitespace-nowrap">
                           {isLoadingLocation ? '--' : hourlyLabels[i]}
                         </span>
                       </div>
