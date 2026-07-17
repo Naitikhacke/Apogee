@@ -19,29 +19,33 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: { id: string;
 
     try {
       if (isSignUp) {
-        // Direct database insert (Bypass Supabase Auth)
-        const { data, error } = await supabase
+        let query: any = supabase
           .from('custom_users')
           .insert([
-            { email, password, full_name: fullName, phone: phoneNumber }
-          ])
-          .select()
-          .single();
+            { email: email.toLowerCase(), password, full_name: fullName, phone: phoneNumber }
+          ]);
+          
+        if (typeof query.select === 'function') {
+          query = query.select().single();
+        }
+
+        const { data, error } = await query;
+        const insertedUser = data ? (Array.isArray(data) ? data[0] : data) : null;
         
         if (error) {
           if (error.code === '23505') throw new Error('An account with this email already exists.');
           throw error;
         }
         
-        if (data) {
-          onLogin({ id: data.id, name: data.full_name, email: data.email, phone: data.phone });
+        if (insertedUser) {
+          onLogin({ id: insertedUser.id, name: insertedUser.full_name, email: insertedUser.email, phone: insertedUser.phone });
         }
       } else {
         // Direct database query for login (Bypass Supabase Auth)
         const { data, error } = await supabase
           .from('custom_users')
           .select('*')
-          .eq('email', email)
+          .eq('email', email.toLowerCase())
           .eq('password', password)
           .single();
 
@@ -164,7 +168,10 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: { id: string;
             {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button 
               type="button" 
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setErrorMsg('');
+              }}
               className="text-[#D9A441] font-semibold hover:underline"
             >
               {isSignUp ? 'Sign In' : 'Create one'}
