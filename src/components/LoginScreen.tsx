@@ -18,34 +18,31 @@ export default function LoginScreen({ onLogin }: { onLogin: (user: { id: string;
     setErrorMsg('');
 
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      
       if (isSignUp) {
-        let query: any = supabase
+        const { data, error } = await supabase
           .from('custom_users')
           .insert([
-            { email: email.toLowerCase(), password, full_name: fullName, phone: phoneNumber }
-          ]);
-          
-        if (typeof query.select === 'function') {
-          query = query.select().single();
-        }
-
-        const { data, error } = await query;
-        const insertedUser = data ? (Array.isArray(data) ? data[0] : data) : null;
+            { email: cleanEmail, password, full_name: fullName, phone: phoneNumber }
+          ])
+          .select()
+          .single();
         
         if (error) {
           if (error.code === '23505') throw new Error('An account with this email already exists.');
           throw error;
         }
         
-        if (insertedUser) {
-          onLogin({ id: insertedUser.id, name: insertedUser.full_name, email: insertedUser.email, phone: insertedUser.phone });
+        if (data) {
+          onLogin({ id: data.id, name: data.full_name, email: data.email, phone: data.phone });
         }
       } else {
         // Direct database query for login (Bypass Supabase Auth)
         const { data, error } = await supabase
           .from('custom_users')
           .select('*')
-          .eq('email', email.toLowerCase())
+          .eq('email', cleanEmail)
           .eq('password', password)
           .single();
 
