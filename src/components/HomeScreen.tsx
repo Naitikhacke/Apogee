@@ -120,15 +120,27 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
       const handleFallback = async () => {
         try {
           const ipRes = await fetch('https://ipapi.co/json/');
-          const ipData = await ipRes.json();
-          if (ipData.latitude && ipData.longitude) {
-            await processLocationData(ipData.latitude, ipData.longitude, ipData.city, ipData.region);
-            return;
+          if (ipRes.ok) {
+            const ipData = await ipRes.json();
+            if (ipData.latitude && ipData.longitude) {
+              await processLocationData(ipData.latitude, ipData.longitude, ipData.city, ipData.region);
+              return;
+            }
+          }
+          
+          // Secondary fallback
+          const altRes = await fetch('http://ip-api.com/json/');
+          if (altRes.ok) {
+             const altData = await altRes.json();
+             if (altData.lat && altData.lon) {
+                await processLocationData(altData.lat, altData.lon, altData.city, altData.regionName);
+                return;
+             }
           }
         } catch (ipError) {
           console.error("IP fallback also failed", ipError);
         }
-        setLocationName('Location Denied');
+        setLocationName('Location Unavailable');
         setIsLoadingLocation(false);
       };
 
@@ -208,7 +220,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
               </div>
               <h2 className="text-2xl md:text-4xl font-bold mb-6 leading-tight max-w-[90%]">{apodTitle}</h2>
               <div className="flex justify-between items-center w-full">
-                <button onClick={() => onNavigate?.('ai-assistant')} className="bg-[#D9A441] text-black font-semibold px-6 py-3 rounded-full flex items-center gap-2 glow-amber hover:scale-105 transition-transform">
+                <button onClick={() => onNavigate?.('planner')} className="bg-[#D9A441] text-black font-semibold px-6 py-3 rounded-full flex items-center gap-2 glow-amber hover:scale-105 transition-transform">
                   <Moon size={18} fill="black" />
                   Plan session
                 </button>
