@@ -16,6 +16,11 @@ export default function CameraScreen({ onBack }: { onBack: () => void }) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
 
+  // Analysis State
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState<any[] | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   const getCameras = async () => {
     try {
       const allDevices = await navigator.mediaDevices.enumerateDevices();
@@ -93,6 +98,33 @@ export default function CameraScreen({ onBack }: { onBack: () => void }) {
 
   const retakePhoto = () => {
     setPhoto(null);
+    setAnalysisResults(null);
+    setAnalysisError(null);
+  };
+
+  const analyzePhoto = async () => {
+    if (!photo) return;
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      const res = await fetch('/api/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: photo })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAnalysisResults(data.objects || []);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setAnalysisError(errData.error || 'Failed to analyze photo.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAnalysisError(err.message || 'An error occurred during image analysis.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const toggleCamera = () => {
@@ -207,8 +239,12 @@ export default function CameraScreen({ onBack }: { onBack: () => void }) {
             <button onClick={retakePhoto} className="text-white font-medium py-3 px-6 rounded-full glass hover:bg-white/10 transition">
               Retake
             </button>
-            <button className="bg-[#D9A441] text-black font-semibold py-3 px-8 rounded-full flex items-center gap-2 glow-amber hover:scale-105 transition-transform">
-              <Sparkles size={18} /> Enhance
+            <button 
+              onClick={analyzePhoto}
+              disabled={isAnalyzing}
+              className="bg-[#D9A441] text-black font-semibold py-3 px-8 rounded-full flex items-center gap-2 glow-amber hover:scale-105 transition-transform disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <Sparkles size={18} /> {isAnalyzing ? 'Analyzing...' : 'Analyze Sky'}
             </button>
           </>
         ) : hasPermission ? (
@@ -236,6 +272,80 @@ export default function CameraScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+      {/* Analysis Overlay Panel */}
+      {(isAnalyzing || analysisResults || analysisError) && (
+        <div className="absolute bottom-36 left-6 right-6 max-h-[50%] bg-[#0B0F17]/90 backdrop-blur-xl rounded-3xl border border-white/10 p-5 overflow-y-auto no-scrollbar z-40 shadow-2xl flex flex-col gap-4 text-white">
+          <div className="flex justify-between items-center pb-2 border-b border-white/5">
+            <h4 className="font-semibold text-sm flex items-center gap-2 text-[#D9A441]">
+              <Sparkles size={16} />
+              Sky Object Classifier
+            </h4>
+            {(analysisResults || analysisError) && (
+              <button 
+                onClick={() => {
+                  setAnalysisResults(null);
+                  setAnalysisError(null);
+                }} 
+                className="text-[#A2A9B3] hover:text-white text-[10px] font-semibold uppercase tracking-wider"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          
+          {isAnalyzing && (
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <div className="w-8 h-8 border-4 border-[#D9A441] border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-xs text-[#A2A9B3] animate-pulse">Running Multimodal Vision Classification...</p>
+            </div>
+          )}
+          
+          {analysisError && (
+            <div className="text-center py-6 text-red-400 text-xs">
+              <p>{analysisError}</p>
+              <button onClick={analyzePhoto} className="mt-3 text-[#D9A441] hover:underline text-[10px] font-bold uppercase tracking-wider">
+                Retry Analysis
+              </button>
+            </div>
+          )}
+          
+          {analysisResults && (
+            <div className="flex flex-col gap-3">
+              {analysisResults.length === 0 ? (
+                <p className="text-xs text-[#A2A9B3] text-center py-6">No sky objects identified. Try a clearer or higher exposure photo.</p>
+              ) : (
+                analysisResults.map((obj: any, idx: number) => (
+                  <div key={idx} className="bg-white/5 px-4 py-3 rounded-2xl flex flex-col gap-1 border border-white/5 hover:border-white/10 transition-colors">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-xs text-white/95">{obj.name}</span>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                        obj.type === 'constellation' ? 'bg-purple-500/10 text-purple-400' :
+                        obj.type === 'nebula' ? 'bg-pink-500/10 text-pink-400' :
+                        obj.type === 'galaxy' ? 'bg-blue-500/10 text-blue-400' :
+                        obj.type === 'planet' ? 'bg-amber-500/10 text-amber-400' :
+                        'bg-white/10 text-[#A2A9B3]'
+                      }`}>
+                        {obj.type.toUpperCase()}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#A2A9B3] leading-relaxed mt-0.5">{obj.description}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[8px] text-[#A2A9B3] font-semibold">CONFIDENCE</span>
+                      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-[#4ADE80] rounded-full" 
+                          style={{ width: `${Math.round(obj.confidence * 100)}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-[9px] text-[#4ADE80] font-bold font-mono">{Math.round(obj.confidence * 100)}%</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
