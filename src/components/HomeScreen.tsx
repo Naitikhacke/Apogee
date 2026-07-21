@@ -31,10 +31,16 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
           let region = fallbackRegion;
           
           if (!city) {
-            const geoResponse = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
-            const geoData = await geoResponse.json();
-            city = geoData.city || geoData.locality;
-            region = geoData.principalSubdivision || geoData.countryCode;
+            try {
+              const geoResponse = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+              if (geoResponse.ok) {
+                const geoData = await geoResponse.json();
+                city = geoData.city || geoData.locality;
+                region = geoData.principalSubdivision || geoData.countryCode;
+              }
+            } catch (geoErr) {
+              console.warn("Reverse geocoding failed, falling back to coordinates", geoErr);
+            }
           }
           
           if (city && region) {
@@ -68,56 +74,62 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
           }
 
           // 3. Fetch real-time weather/astronomy data from Open-Meteo
-          const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
-          const weatherData = await weatherResponse.json();
+          try {
+            const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
+            if (weatherResponse.ok) {
+              const weatherData = await weatherResponse.json();
 
-          if (weatherData && weatherData.current) {
-            // Invert cloud cover to get clear skies percentage
-            const currentCloud = weatherData.current.cloud_cover;
-            setClearSkiesPercent(100 - currentCloud);
-            
-            // Weather Code Mapping
-            const code = weatherData.current.weather_code;
-            let desc = 'Clear';
-            if (code > 0 && code <= 3) desc = 'Cloudy';
-            else if (code > 3 && code <= 48) desc = 'Fog';
-            else if (code > 48 && code <= 57) desc = 'Drizzle';
-            else if (code > 57 && code <= 67) desc = 'Rain';
-            else if (code > 67 && code <= 77) desc = 'Snow';
-            else if (code > 77 && code <= 82) desc = 'Showers';
-            else if (code > 82) desc = 'Stormy';
-            
-            setWeatherDesc(desc);
-            setTemperature(Math.round(weatherData.current.temperature_2m).toString());
+              if (weatherData && weatherData.current) {
+                // Invert cloud cover to get clear skies percentage
+                const currentCloud = weatherData.current.cloud_cover;
+                setClearSkiesPercent(100 - currentCloud);
+                
+                // Weather Code Mapping
+                const code = weatherData.current.weather_code;
+                let desc = 'Clear';
+                if (code > 0 && code <= 3) desc = 'Cloudy';
+                else if (code > 3 && code <= 48) desc = 'Fog';
+                else if (code > 48 && code <= 57) desc = 'Drizzle';
+                else if (code > 57 && code <= 67) desc = 'Rain';
+                else if (code > 67 && code <= 77) desc = 'Snow';
+                else if (code > 77 && code <= 82) desc = 'Showers';
+                else if (code > 82) desc = 'Stormy';
+                
+                setWeatherDesc(desc);
+                setTemperature(Math.round(weatherData.current.temperature_2m).toString());
 
-            // Format times
-            const formatTime = (isoString: string) => {
-              if (!isoString) return '--:--';
-              const date = new Date(isoString);
-              return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-            };
-            
-            if (weatherData.daily?.sunrise?.[0]) {
-              setSunrise(formatTime(weatherData.daily.sunrise[0]));
-            }
-            if (weatherData.daily?.sunset?.[0]) {
-              setSunset(formatTime(weatherData.daily.sunset[0]));
-            }
+                // Format times
+                const formatTime = (isoString: string) => {
+                  if (!isoString) return '--:--';
+                  const date = new Date(isoString);
+                  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                };
+                
+                if (weatherData.daily?.sunrise?.[0]) {
+                  setSunrise(formatTime(weatherData.daily.sunrise[0]));
+                }
+                if (weatherData.daily?.sunset?.[0]) {
+                  setSunset(formatTime(weatherData.daily.sunset[0]));
+                }
 
-            // Get next 7 hours of clear skies
-            const currentHourStr = weatherData.current.time;
-            const currentIndex = weatherData.hourly.time.findIndex((t: string) => t >= currentHourStr);
-            
-            if (currentIndex !== -1) {
-              const next7HoursCloud = weatherData.hourly.cloud_cover.slice(currentIndex, currentIndex + 7);
-              setHourlyClearSkies(next7HoursCloud.map((c: number) => 100 - c));
-              
-              const next7Times = weatherData.hourly.time.slice(currentIndex, currentIndex + 7);
-              setHourlyLabels(next7Times.map((t: string) => {
-                const date = new Date(t);
-                return date.toLocaleTimeString([], { hour: 'numeric', hour12: true }).replace(/ [AP]M/i, (m) => m[0].toLowerCase() + m[1].toLowerCase());
-              }));
+                // Get next 7 hours of clear skies
+                const currentHourStr = weatherData.current.time;
+                const currentIndex = weatherData.hourly.time.findIndex((t: string) => t >= currentHourStr);
+                
+                if (currentIndex !== -1) {
+                  const next7HoursCloud = weatherData.hourly.cloud_cover.slice(currentIndex, currentIndex + 7);
+                  setHourlyClearSkies(next7HoursCloud.map((c: number) => 100 - c));
+                  
+                  const next7Times = weatherData.hourly.time.slice(currentIndex, currentIndex + 7);
+                  setHourlyLabels(next7Times.map((t: string) => {
+                    const date = new Date(t);
+                    return date.toLocaleTimeString([], { hour: 'numeric', hour12: true }).replace(/ [AP]M/i, (m) => m[0].toLowerCase() + m[1].toLowerCase());
+                  }));
+                }
+              }
             }
+          } catch (weatherErr) {
+            console.error("Failed to fetch weather data", weatherErr);
           }
         } catch (error) {
           console.error("Error fetching real-time data:", error);
