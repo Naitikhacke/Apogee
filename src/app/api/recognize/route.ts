@@ -25,8 +25,8 @@ export async function POST(req: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Use the verified active model gemini-2.5-flash
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // Use the Pro model for significantly better visual reasoning
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
     const prompt = `Identify and classify all sky objects in this astronomical photo. 
 List any constellations, bright stars, planets, nebulae, galaxies, or celestial events visible in the photo. 
