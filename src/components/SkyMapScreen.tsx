@@ -198,10 +198,9 @@ export default function SkyMapScreen() {
                 </div>
               </div>
               
-              {/* Location Recommender */}
               {activeTargetData.recommendedLocations && activeTargetData.recommendedLocations.length > 0 && (
                 <div className="mt-4 border-t border-white/5 pt-3">
-                  <h5 className="text-[10px] font-bold text-[#D9A441] mb-2 uppercase tracking-widest">Recommended Dark Sky Spots</h5>
+                  <h5 className="text-[10px] font-bold text-[#D9A441] mb-2 uppercase tracking-widest">Nearby Observatories (OSM)</h5>
                   <div className="flex flex-col gap-2">
                     {activeTargetData.recommendedLocations.map((spot: any) => (
                       <div key={spot.id} className="flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors px-3 py-2 rounded-xl text-[11px]">
@@ -210,7 +209,7 @@ export default function SkyMapScreen() {
                           <p className="text-[9px] text-[#A2A9B3]">{spot.region}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-[#4ADE80]">Bortle {spot.bortle}</p>
+                          <p className="font-bold text-[#4ADE80]">{spot.bortle !== 'N/A' ? `Bortle ${spot.bortle}` : 'Observatory'}</p>
                           <p className="text-[9px] text-[#A2A9B3]">{spot.distance} km away</p>
                         </div>
                       </div>

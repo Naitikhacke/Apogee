@@ -19,21 +19,6 @@ const planetaryObjects = [
   { id: 'venus', name: 'Venus', type: 'Planet', body: Body.Venus, eq: 'Telephoto lens', img: '/images/venus.png' }
 ];
 
-// Pre-configured Dark Sky Spots for Location Recommendations (Feature B)
-const darkSkySpots = [
-  { id: 'hanle', name: "Hanle Dark Sky Reserve", lat: 32.7794, lon: 78.9754, bortle: 1, region: "Ladakh, India" },
-  { id: 'spiti', name: "Kibber Dark Sky Village", lat: 32.2461, lon: 78.0349, bortle: 2, region: "Spiti, India" },
-  { id: 'manas', name: "Manas National Park", lat: 26.1400, lon: 91.7300, bortle: 3, region: "Assam, India" },
-  { id: 'coorg', name: "Mandalpatti Peak", lat: 12.4244, lon: 75.7382, bortle: 4, region: "Karnataka, India" },
-  { id: 'jaisalmer', name: "Thar Desert stargazing", lat: 26.9157, lon: 70.9083, bortle: 3, region: "Rajasthan, India" },
-  { id: 'death_valley', name: "Death Valley National Park", lat: 36.5323, lon: -116.9325, bortle: 1, region: "California, US" },
-  { id: 'joshua_tree', name: "Joshua Tree Dark Sky Spot", lat: 33.8734, lon: -115.9010, bortle: 3, region: "California, US" },
-  { id: 'cherry_springs', name: "Cherry Springs State Park", lat: 41.6501, lon: -77.8163, bortle: 2, region: "Pennsylvania, US" },
-  { id: 'mauna_kea', name: "Mauna Kea Observatory", lat: 19.8206, lon: -155.4681, bortle: 1, region: "Hawaii, US" },
-  { id: 'galloway', name: "Galloway Forest Park", lat: 55.0740, lon: -4.4363, bortle: 3, region: "Scotland, UK" },
-  { id: 'aoraki', name: "Aoraki Mackenzie Reserve", lat: -43.7342, lon: 170.0963, bortle: 1, region: "South Island, NZ" },
-  { id: 'warrumbungle', name: "Warrumbungle National Park", lat: -31.2748, lon: 149.0069, bortle: 1, region: "Coonabarabran, AU" }
-];
 
 // Distance calculation using Haversine formula
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -228,18 +213,33 @@ export async function GET(req: Request) {
         riseTime = nextRise ? nextRise.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--:--';
         setTime = nextSet ? nextSet.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--:--';
       }
-      
-      // Calculate distances to dark sky spots and sort
-      const recommendedLocations = darkSkySpots
-        .map(spot => {
-          const dist = calculateDistance(lat, lon, spot.lat, spot.lon);
-          return {
-            ...spot,
-            distance: Math.round(dist)
-          };
-        })
-        .sort((a, b) => a.distance - b.distance)
-        .slice(0, 3); // Get 3 closest
+      // Fetch real nearby observatories using OpenStreetMap (Overpass API)
+      let recommendedLocations: any[] = [];
+      try {
+        const overpassQuery = `[out:json];(node["man_made"="observatory"](around:200000,${lat},${lon});node["amenity"="planetarium"](around:200000,${lat},${lon}););out;`;
+        const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+        const osmRes = await fetch(overpassUrl);
+        if (osmRes.ok) {
+          const osmData = await osmRes.json();
+          if (osmData.elements && osmData.elements.length > 0) {
+            recommendedLocations = osmData.elements.map((el: any) => {
+              const dist = calculateDistance(lat, lon, el.lat, el.lon);
+              const name = el.tags?.name || 'Local Observatory';
+              return {
+                id: el.id.toString(),
+                name,
+                lat: el.lat,
+                lon: el.lon,
+                bortle: 'N/A', // Real Bortle requires a specialized light pollution API
+                region: 'Local Area',
+                distance: Math.round(dist)
+              };
+            }).sort((a: any, b: any) => a.distance - b.distance).slice(0, 3);
+          }
+        }
+      } catch (err) {
+        console.error('Overpass API error:', err);
+      }
         
       return NextResponse.json({
         target: {
