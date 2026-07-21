@@ -77,31 +77,68 @@ export async function GET(req: Request) {
       const startDate = startParam ? new Date(startParam) : new Date();
       
       const calendarDays = [];
+      
+      // Fetch REAL weather data from Open-Meteo API
+      let weatherData: any = null;
+      try {
+        const endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + days - 1);
+        const startStr = startDate.toISOString().split('T')[0];
+        const endStr = endDate.toISOString().split('T')[0];
+        
+        const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset,cloudcover_mean,precipitation_sum&timezone=auto&start_date=${startStr}&end_date=${endStr}`);
+        if (weatherRes.ok) {
+          weatherData = await weatherRes.json();
+        }
+      } catch (e) {
+        console.error('Failed to fetch real weather data:', e);
+      }
+
       for (let i = 0; i < days; i++) {
         const currentLoopDate = new Date(startDate);
         currentLoopDate.setDate(startDate.getDate() + i);
-        const loopTime = MakeTime(currentLoopDate);
         
-        // Moon Phase Info
+        // Moon Phase Info (real-time calculation using VSOP87 theory)
         const moonIllum = Illumination(Body.Moon, currentLoopDate);
         const moonPhaseAngle = MoonPhase(currentLoopDate);
         const moonAge = (moonPhaseAngle / 360) * 29.53;
         
-        // Calculate Sunrise/Sunset for that day
-        const sunriseEvent = SearchRiseSet(Body.Sun, observer, 1, currentLoopDate, 1);
-        const sunsetEvent = SearchRiseSet(Body.Sun, observer, -1, currentLoopDate, 1);
+        let sunriseStr = '--:--';
+        let sunsetStr = '--:--';
+        let cloudCover = 0;
         
-        const formatTime = (d: Date | null) => {
-          if (!d) return '--:--';
-          return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        };
+        if (weatherData && weatherData.daily) {
+           const dayIdx = weatherData.daily.time.indexOf(currentLoopDate.toISOString().split('T')[0]);
+           if (dayIdx !== -1) {
+             const sr = new Date(weatherData.daily.sunrise[dayIdx]);
+             const ss = new Date(weatherData.daily.sunset[dayIdx]);
+             sunriseStr = sr.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+             sunsetStr = ss.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+             cloudCover = weatherData.daily.cloudcover_mean[dayIdx] || 0;
+           }
+        } else {
+           // Fallback if API fails
+           const sunriseEvent = SearchRiseSet(Body.Sun, observer, 1, currentLoopDate, 1);
+           const sunsetEvent = SearchRiseSet(Body.Sun, observer, -1, currentLoopDate, 1);
+           sunriseStr = sunriseEvent ? sunriseEvent.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--:--';
+           sunsetStr = sunsetEvent ? sunsetEvent.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--:--';
+        }
         
-        // Stargazing Index (Bortle/Moon-adjusted score: 0 to 100)
-        // 0% moon illumination gives 100 score, 100% moon gives 0 score.
-        const skyScore = Math.round((1 - moonIllum.phase_fraction) * 100);
+        // Stargazing Index using REAL cloud cover data
+        // Low cloud cover + low moon illumination = Good score
+        let skyScore = 100;
         let skyQuality = 'Excellent';
-        if (skyScore < 40) skyQuality = 'Poor';
-        else if (skyScore < 80) skyQuality = 'Good';
+        
+        if (weatherData) {
+           skyScore = Math.round((1 - (cloudCover / 100)) * (1 - moonIllum.phase_fraction) * 100);
+           if (cloudCover > 60) skyQuality = 'Poor (Cloudy)';
+           else if (cloudCover > 30) skyQuality = 'Good (Partly Cloudy)';
+           else skyQuality = 'Excellent (Clear)';
+        } else {
+           skyScore = Math.round((1 - moonIllum.phase_fraction) * 100);
+           if (skyScore < 40) skyQuality = 'Poor';
+           else if (skyScore < 80) skyQuality = 'Good';
+        }
         
         calendarDays.push({
           date: currentLoopDate.toISOString().split('T')[0],
@@ -111,11 +148,12 @@ export async function GET(req: Request) {
             age: moonAge.toFixed(1)
           },
           sun: {
-            sunrise: formatTime(sunriseEvent ? sunriseEvent.date : null),
-            sunset: formatTime(sunsetEvent ? sunsetEvent.date : null)
+            sunrise: sunriseStr,
+            sunset: sunsetStr
           },
           skyScore,
-          skyQuality
+          skyQuality,
+          cloudCover
         });
       }
       return NextResponse.json({ days: calendarDays });
@@ -221,6 +259,18 @@ export async function GET(req: Request) {
     // Gather all DSOs and Planets, compute Alt/Az, sort by Altitude
     const recommendations = [];
     
+    // Fetch real-time current weather
+    let currentCloudCover = 0;
+    try {
+      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=cloud_cover&timezone=auto`);
+      if (weatherRes.ok) {
+        const weatherData = await weatherRes.json();
+        currentCloudCover = weatherData.current?.cloud_cover ?? 0;
+      }
+    } catch (e) {
+      console.error('Failed to fetch current weather:', e);
+    }
+    
     // Process deep sky objects
     for (const dso of deepSkyObjects) {
       const hor = Horizon(time, observer, dso.ra, dso.dec, 'normal');
@@ -228,11 +278,12 @@ export async function GET(req: Request) {
       const sunHor = Horizon(time, observer, sunEqu.ra, sunEqu.dec, 'normal');
       const isDark = sunHor.altitude < -6; // Sun is below horizon
       
-      // Calculate a rating (0-100) based on altitude and moon phase
+      // Calculate a rating (0-100) based on altitude, moon phase, and REAL cloud cover
       const moonIllum = Illumination(Body.Moon, date);
-      const moonFactor = dso.type === 'Galaxy' || dso.type === 'Nebula' ? (1 - moonIllum.phase_fraction) : 1; // Planets/Clusters are less moon-affected
+      const moonFactor = dso.type === 'Galaxy' || dso.type === 'Nebula' ? (1 - moonIllum.phase_fraction) : 1; 
+      const weatherFactor = 1 - (currentCloudCover / 100);
       const altitudeScore = Math.max(0, Math.min(100, (hor.altitude / 90) * 100));
-      const rating = Math.round(altitudeScore * moonFactor);
+      const rating = Math.round(altitudeScore * moonFactor * weatherFactor);
       
       recommendations.push({
         id: dso.id,
@@ -257,7 +308,8 @@ export async function GET(req: Request) {
       const isDark = sunHor.altitude < -6;
       
       const altitudeScore = Math.max(0, Math.min(100, (hor.altitude / 90) * 100));
-      const rating = Math.round(altitudeScore); // Moon doesn't affect planet viewing much
+      const weatherFactor = 1 - (currentCloudCover / 100);
+      const rating = Math.round(altitudeScore * weatherFactor); // Moon doesn't affect planet viewing much, but clouds do!
       
       // Get rise time
       const nextRise = SearchRiseSet(planet.body, observer, 1, date, 1);

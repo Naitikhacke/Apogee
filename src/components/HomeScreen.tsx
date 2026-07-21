@@ -16,11 +16,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
   const [hourlyClearSkies, setHourlyClearSkies] = useState<number[]>([0,0,0,0,0,0,0]);
   const [hourlyLabels, setHourlyLabels] = useState<string[]>(['','','','','','','']);
 
-  // NASA & Astronomy Data
-  const [apodImage, setApodImage] = useState('/images/milky_way.png');
-  const [apodTitle, setApodTitle] = useState('Milky Way core rises at 11:42 PM');
+  // Real-Time Recommendations
+  const [recommendations, setRecommendations] = useState<any[]>([]);
   const [moonData, setMoonData] = useState({ illum: 0, age: '--', rise: '--:--', set: '--:--' });
-  const [jupiterRise, setJupiterRise] = useState('--:--');
 
   useEffect(() => {
     const requestLocation = () => {
@@ -55,7 +53,19 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
             rise: astroData.moon.rise,
             set: astroData.moon.set
           });
-          setJupiterRise(astroData.jupiter.rise);
+
+          // Fetch REAL Target Recommendations from Backend
+          try {
+            const recRes = await fetch(`/api/astronomy?latitude=${latitude}&longitude=${longitude}`);
+            if (recRes.ok) {
+              const recData = await recRes.json();
+              if (recData.recommendations) {
+                setRecommendations(recData.recommendations);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch recommendations", e);
+          }
 
           // 3. Fetch real-time weather/astronomy data from Open-Meteo
           const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover,temperature_2m,weather_code&hourly=cloud_cover&daily=sunrise,sunset&timezone=auto`);
@@ -160,22 +170,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
       }
     };
 
-    const fetchNASA = async () => {
-      try {
-        const nasaKey = process.env.NEXT_PUBLIC_NASA_API_KEY || 'DEMO_KEY';
-        const nasaRes = await fetch(`https://api.nasa.gov/planetary/apod?api_key=${nasaKey}`);
-        const nasaData = await nasaRes.json();
-        if (nasaData && nasaData.url && nasaData.media_type === 'image') {
-          setApodImage(nasaData.url);
-          setApodTitle(`NASA APOD: ${nasaData.title}`);
-        }
-      } catch (err) {
-        console.error("NASA API Error", err);
-      }
-    };
-
     requestLocation();
-    fetchNASA();
   }, []);
 
   return (
@@ -210,21 +205,23 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
 
         <div className="px-6 flex flex-col gap-5">
           {/* Hero Card */}
-          <div className="relative rounded-3xl overflow-hidden h-[320px] md:h-[400px] flex flex-col justify-end p-6 md:p-10">
-            <Image src={apodImage} alt="NASA APOD" fill className="object-cover absolute inset-0 z-0" unoptimized />
+          <div className="relative rounded-3xl overflow-hidden h-[320px] md:h-[400px] flex flex-col justify-end p-6 md:p-10 border border-white/5 shadow-2xl">
+            <Image src="/images/milky_way.png" alt="Night Sky" fill className="object-cover absolute inset-0 z-0" unoptimized />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F17] via-[#0B0F17]/70 to-transparent z-10" />
             <div className="relative z-20 w-full max-w-3xl">
-              <div className="flex items-center gap-1 text-[#D9A441] text-xs md:text-sm font-semibold mb-3 md:mb-4 bg-[#D9A441]/20 w-max px-3 py-1.5 rounded-md">
+              <div className="flex items-center gap-1 text-[#D9A441] text-xs md:text-sm font-semibold mb-3 md:mb-4 bg-[#D9A441]/20 w-max px-3 py-1.5 rounded-md border border-[#D9A441]/30">
                 <Star size={14} fill="#D9A441" />
-                {clearSkiesPercent > 80 ? 'Excellent conditions tonight' : clearSkiesPercent > 50 ? 'Fair conditions tonight' : 'Poor conditions tonight'}
+                {isLoadingLocation ? 'Analyzing sky conditions...' : clearSkiesPercent > 70 ? 'Excellent conditions tonight' : clearSkiesPercent > 30 ? 'Fair conditions tonight' : 'Poor conditions tonight'}
               </div>
-              <h2 className="text-2xl md:text-4xl font-bold mb-6 leading-tight max-w-[90%]">{apodTitle}</h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-6 leading-tight max-w-[90%] tracking-wide">Tonight's Sky Overview</h2>
               <div className="flex justify-between items-center w-full">
-                <button onClick={() => onNavigate?.('planner')} className="bg-[#D9A441] text-black font-semibold px-6 py-3 rounded-full flex items-center gap-2 glow-amber hover:scale-105 transition-transform">
+                <button onClick={() => onNavigate?.('planner')} className="bg-[#D9A441] text-black font-bold px-6 py-3 rounded-full flex items-center gap-2 glow-amber hover:scale-105 transition-transform">
                   <Moon size={18} fill="black" />
-                  Plan session
+                  Plan Session
                 </button>
-                <span className="text-sm md:text-base text-gray-300 font-medium hidden md:block">Bortle 2 • {isLoadingLocation ? '--' : clearSkiesPercent}% clear</span>
+                <span className="text-sm md:text-base text-gray-300 font-medium hidden md:block">
+                  {isLoadingLocation ? '--' : clearSkiesPercent}% Clear Skies
+                </span>
               </div>
             </div>
           </div>
@@ -269,22 +266,22 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                       </div>
                     </div>
                     
-                    <div className="flex flex-col gap-5 md:pr-4">
-                      <div className="flex flex-col justify-center items-end">
+                    <div className="flex flex-col gap-4 md:pr-4 relative z-10">
+                      <div className="flex flex-col justify-center items-end bg-[#0B0F17]/70 backdrop-blur-md rounded-lg p-2 border border-white/5">
                         <span className="text-sm font-semibold">{moonData.age}d</span>
                         <span className="text-[10px] text-[#A2A9B3] uppercase font-bold">Age</span>
                       </div>
-                      <div className="flex flex-col justify-center items-end">
+                      <div className="flex flex-col justify-center items-end bg-[#0B0F17]/70 backdrop-blur-md rounded-lg p-2 border border-white/5">
                         <span className="text-sm font-semibold">{moonData.rise}</span>
                         <span className="text-[10px] text-[#A2A9B3] uppercase font-bold">Rise</span>
                       </div>
-                      <div className="flex flex-col justify-center items-end">
+                      <div className="flex flex-col justify-center items-end bg-[#0B0F17]/70 backdrop-blur-md rounded-lg p-2 border border-white/5">
                         <span className="text-sm font-semibold">{moonData.set}</span>
                         <span className="text-[10px] text-[#A2A9B3] uppercase font-bold">Set</span>
                       </div>
                     </div>
                   </div>
-                  <div className="absolute right-[-40px] bottom-[-20px] md:bottom-0 md:top-auto top-auto w-48 md:w-56 h-48 md:h-56 opacity-80 z-0">
+                  <div className="absolute right-[-40px] bottom-[-20px] md:bottom-0 md:top-auto top-auto w-48 md:w-56 h-48 md:h-56 opacity-40 pointer-events-none z-0">
                      <Image src="/images/moon.png" alt="Moon" fill className="object-contain" />
                   </div>
                 </div>
@@ -346,41 +343,36 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
                 </div>
                 
                 <div className="flex flex-col gap-4">
-                  <div className="glass-panel rounded-3xl p-5 flex items-center md:items-start lg:items-center gap-4 border border-[#4ADE80]/30 relative overflow-hidden group hover:border-[#4ADE80]/60 transition-colors cursor-pointer">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#A855F7]/10 blur-2xl rounded-full group-hover:bg-[#A855F7]/20 transition-colors"></div>
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden relative shrink-0">
-                       <Image src="/images/andromeda.png" alt="Andromeda" fill className="object-cover" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-semibold text-[15px] md:text-base">Jupiter Visibility</h4>
-                        <span className="text-[#4ADE80] text-xs font-bold bg-[#4ADE80]/10 px-2 py-0.5 rounded-md">Real-time</span>
+                  {isLoadingLocation ? (
+                    <div className="flex justify-center py-8"><Loader2 size={24} className="animate-spin text-[#A2A9B3]" /></div>
+                  ) : recommendations.length > 0 ? (
+                    recommendations.slice(0, 2).map((rec, idx) => (
+                      <div key={rec.id} className={`glass-panel rounded-3xl p-5 flex items-center md:items-start lg:items-center gap-4 border ${rec.rating > 70 ? 'border-[#4ADE80]/30 hover:border-[#4ADE80]/60' : 'border-white/10 hover:border-white/30'} relative overflow-hidden group transition-colors cursor-pointer ${idx === 1 ? 'hidden md:flex' : ''}`}>
+                        {rec.rating > 70 && <div className="absolute top-0 right-0 w-32 h-32 bg-[#A855F7]/5 blur-2xl rounded-full group-hover:bg-[#A855F7]/10 transition-colors"></div>}
+                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden relative shrink-0 bg-[#161D2B] flex items-center justify-center">
+                           {rec.img ? <Image src={rec.img} alt={rec.name} fill className="object-cover" /> : <Star size={24} className="text-[#A2A9B3]" />}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <h4 className="font-semibold text-[15px] md:text-base truncate">{rec.name}</h4>
+                            <span className={`${rec.rating > 70 ? 'text-[#4ADE80] bg-[#4ADE80]/10' : 'text-[#D9A441] bg-[#D9A441]/10'} text-xs font-bold px-2 py-0.5 rounded-md whitespace-nowrap`}>
+                              Score: {rec.rating}
+                            </span>
+                          </div>
+                          <p className="text-[#A2A9B3] text-xs md:text-sm mt-1 mb-1">{rec.type}</p>
+                          <p className="text-[#A2A9B3] text-xs leading-relaxed flex flex-col">
+                            <span className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${rec.isVisible ? 'bg-[#4ADE80]' : 'bg-[#EF4444]'}`}></span>
+                              {rec.isVisible ? 'Visible Tonight' : 'Not Visible'}
+                            </span>
+                            <span className="ml-3 mt-0.5 truncate text-[10px] md:text-xs text-white/60">~ {rec.equipment}</span>
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[#A2A9B3] text-xs md:text-sm mt-1 mb-1">Planet</p>
-                      <p className="text-[#A2A9B3] text-xs leading-relaxed flex flex-col">
-                        <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#D9A441]"></span>Rises at {jupiterRise}</span>
-                        <span className="ml-3 mt-0.5">~ Any telephoto lens</span>
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Additional desktop suggestion */}
-                  <div className="hidden md:flex glass-panel rounded-3xl p-5 items-center lg:items-center gap-4 border border-white/5 relative overflow-hidden group hover:border-white/20 transition-colors cursor-pointer">
-                    <div className="w-20 h-20 rounded-xl overflow-hidden relative shrink-0 bg-[#161D2B] flex items-center justify-center">
-                       <Star size={32} className="text-[#A2A9B3]" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-semibold text-base text-white/90">Orion Nebula</h4>
-                        <span className="text-[#D9A441] text-xs font-bold bg-[#D9A441]/10 px-2 py-0.5 rounded-md">82%</span>
-                      </div>
-                      <p className="text-[#A2A9B3] text-sm mt-1 mb-1">M42</p>
-                      <p className="text-[#A2A9B3] text-xs leading-relaxed flex flex-col">
-                        <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#D9A441]"></span>3:10 AM - 5:20 AM</span>
-                        <span className="ml-3 mt-0.5">~ 200mm+ lens</span>
-                      </p>
-                    </div>
-                  </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-[#A2A9B3] text-sm py-8 glass-panel rounded-2xl border border-white/5">No optimal targets right now.</div>
+                  )}
                 </div>
               </div>
             </div>
