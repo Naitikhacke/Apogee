@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     // Use the Flash model or custom recognize model from env for reliable multimodal execution
-    const modelName = process.env.GEMINI_RECOGNIZE_MODEL || 'gemini-1.5-flash';
+    const modelName = process.env.GEMINI_RECOGNIZE_MODEL || 'gemini-2.5-flash';
     const model = genAI.getGenerativeModel({ model: modelName });
 
     const prompt = `Identify and classify all sky objects in this astronomical photo. 
