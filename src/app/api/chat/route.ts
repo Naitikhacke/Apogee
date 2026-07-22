@@ -45,9 +45,10 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
     
-    // The model configuration - FIXED: updated to the correct model name
+    // Use custom tuned model if specified in environment variables, else default to gemini-2.5-flash
+    const chatModel = process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash';
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+      model: chatModel,
       systemInstruction: { role: 'system', parts: [{ text: systemInstruction }] }
     });
 
