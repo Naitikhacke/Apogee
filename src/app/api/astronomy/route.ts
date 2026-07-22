@@ -55,6 +55,13 @@ export async function GET(req: Request) {
     
     const observer = new Observer(lat, lon, 0);
     const date = new Date();
+    
+    // Shift calculations to 10 PM (22:00) if accessed during the daytime (6 AM to 6 PM)
+    const currentHour = date.getHours();
+    if (currentHour >= 6 && currentHour < 18) {
+      date.setHours(22, 0, 0, 0);
+    }
+    
     const time = MakeTime(date);
 
     // MODE C: Calendar Range Calculations (Feature C)
@@ -205,7 +212,7 @@ export async function GET(req: Request) {
         // Calculate sun position to determine if it is dark
         const sunEqu = Equator(Body.Sun, checkTime, observer, true, true);
         const sunHor = Horizon(loopAstroTime, observer, sunEqu.ra, sunEqu.dec, 'normal');
-        const isDark = sunHor.altitude < -12; // Nautical twilight or better
+        const isDark = sunHor.altitude < -6; // Civil twilight or better (sun is below -6 degrees)
         const isVisible = hor.altitude > 15; // Above horizon
         
         path.push({
