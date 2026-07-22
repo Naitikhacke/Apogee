@@ -15,6 +15,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
   const [weatherDesc, setWeatherDesc] = useState('Weather');
   const [hourlyClearSkies, setHourlyClearSkies] = useState<number[]>([0,0,0,0,0,0,0]);
   const [hourlyLabels, setHourlyLabels] = useState<string[]>(['','','','','','','']);
+  const [bortleClass, setBortleClass] = useState<number | string>('--');
 
   // Real-Time Recommendations
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -67,6 +68,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
               const recData = await recRes.json();
               if (recData.recommendations) {
                 setRecommendations(recData.recommendations);
+              }
+              if (recData.bortle) {
+                setBortleClass(recData.bortle);
               }
             }
           } catch (e) {
@@ -208,10 +212,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
               )}
               <span className="max-w-[120px] md:max-w-none truncate">{locationName}</span>
             </div>
-            <button className="w-10 h-10 rounded-full glass flex items-center justify-center relative hover:bg-white/10 transition">
-              <Bell size={20} className="text-white" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-[#D9A441] rounded-full border-2 border-[#101827]"></span>
-            </button>
           </div>
         </div>
 
@@ -242,20 +242,25 @@ export default function HomeScreen({ onNavigate }: { onNavigate?: (screen: strin
             {/* Left Column (Desktop) */}
             <div className="md:col-span-2 flex flex-col gap-5">
               {/* Quick Stats */}
-              <div className="flex justify-between glass-panel rounded-2xl p-4 px-6 md:px-10">
+              <div className="flex justify-between glass-panel rounded-2xl p-4 px-4 md:px-8">
                 <div className="flex flex-col items-center">
-                  <span className="text-lg md:text-2xl font-bold">{isLoadingLocation ? '--:--' : sunset.split(' ')[0]} <span className="text-xs md:text-sm font-normal">{sunset.split(' ')[1] || 'PM'}</span></span>
-                  <span className="text-[#A2A9B3] text-xs md:text-sm">Sunset</span>
+                  <span className="text-base md:text-xl font-bold">{isLoadingLocation ? '--:--' : sunset.split(' ')[0]} <span className="text-[10px] md:text-xs font-normal">{sunset.split(' ')[1] || 'PM'}</span></span>
+                  <span className="text-[#A2A9B3] text-[10px] md:text-xs">Sunset</span>
                 </div>
-                <div className="w-px h-10 md:h-12 bg-white/10" />
+                <div className="w-px h-10 bg-white/10" />
                 <div className="flex flex-col items-center">
-                  <span className="text-lg md:text-2xl font-bold">{isLoadingLocation ? '--' : temperature}°<span className="text-xs md:text-sm font-normal">C</span></span>
-                  <span className="text-[#A2A9B3] text-xs md:text-sm">{isLoadingLocation ? 'Loading' : weatherDesc}</span>
+                  <span className="text-base md:text-xl font-bold">{isLoadingLocation ? '--' : temperature}°<span className="text-[10px] md:text-xs font-normal">C</span></span>
+                  <span className="text-[#A2A9B3] text-[10px] md:text-xs">{isLoadingLocation ? 'Loading' : weatherDesc}</span>
                 </div>
-                <div className="w-px h-10 md:h-12 bg-white/10" />
+                <div className="w-px h-10 bg-white/10" />
                 <div className="flex flex-col items-center">
-                  <span className="text-lg md:text-2xl font-bold">{isLoadingLocation ? '--:--' : sunrise.split(' ')[0]} <span className="text-xs md:text-sm font-normal">{sunrise.split(' ')[1] || 'AM'}</span></span>
-                  <span className="text-[#A2A9B3] text-xs md:text-sm">Sunrise</span>
+                  <span className="text-base md:text-xl font-bold">{isLoadingLocation ? 'Class --' : `Bortle ${bortleClass}`}</span>
+                  <span className="text-[#A2A9B3] text-[10px] md:text-xs">Dark Sky</span>
+                </div>
+                <div className="w-px h-10 bg-white/10" />
+                <div className="flex flex-col items-center">
+                  <span className="text-base md:text-xl font-bold">{isLoadingLocation ? '--:--' : sunrise.split(' ')[0]} <span className="text-[10px] md:text-xs font-normal">{sunrise.split(' ')[1] || 'AM'}</span></span>
+                  <span className="text-[#A2A9B3] text-[10px] md:text-xs">Sunrise</span>
                 </div>
               </div>
 

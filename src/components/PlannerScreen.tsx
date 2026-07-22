@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Moon, CloudSun, Star, Map, Plus, X } from 'lucide-react';
+import { Calendar as CalendarIcon, Moon, CloudSun, Star, Map, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 
 interface Plan {
@@ -18,6 +18,8 @@ export default function PlannerScreen() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [location, setLocation] = useState({ lat: 0, lon: 0, loaded: false });
   const [dailyDetails, setDailyDetails] = useState<any[]>([]);
+  const [bortleClass, setBortleClass] = useState<number | string>('--');
+  const [bortleDesc, setBortleDesc] = useState<string>('Detecting light pollution...');
   
   // New Plan Form State
   const [newTitle, setNewTitle] = useState('');
@@ -25,21 +27,41 @@ export default function PlannerScreen() {
   const [newTime, setNewTime] = useState('22:00');
   const [newType, setNewType] = useState('Deep Sky');
 
+  const getWeek = (refDate = new Date()) => {
+    const days = [];
+    const current = new Date(refDate);
+    current.setDate(current.getDate() - current.getDay()); // Sunday
+    for (let i = 0; i < 7; i++) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return days;
+  };
+
+  const loadWeekDetails = async (refDate: Date, lat: number, lon: number) => {
+    const days = getWeek(refDate);
+    setWeekDays(days);
+    
+    const weekStartStr = days[0].toISOString().split('T')[0];
+    try {
+      const res = await fetch(`/api/astronomy?latitude=${lat}&longitude=${lon}&days=7&startDate=${weekStartStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyDetails(data.days || []);
+        if (data.bortle) {
+          setBortleClass(data.bortle);
+          setBortleDesc(data.bortleDesc || 'Suburban Sky');
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     
-    // Generate current week starting from Sunday
-    const getWeek = (refDate = new Date()) => {
-      const days = [];
-      const current = new Date(refDate);
-      current.setDate(current.getDate() - current.getDay()); // Sunday
-      for (let i = 0; i < 7; i++) {
-        days.push(new Date(current));
-        current.setDate(current.getDate() + 1);
-      }
-      return days;
-    };
-    const daysOfCurrentWeek = getWeek();
+    const daysOfCurrentWeek = getWeek(selectedDate);
     setWeekDays(daysOfCurrentWeek);
 
     // Get location and fetch 7 days of calculations
@@ -49,17 +71,7 @@ export default function PlannerScreen() {
           const lat = position.coords.latitude;
           const lon = position.coords.longitude;
           setLocation({ lat, lon, loaded: true });
-          
-          const weekStartStr = daysOfCurrentWeek[0].toISOString().split('T')[0];
-          try {
-            const res = await fetch(`/api/astronomy?latitude=${lat}&longitude=${lon}&days=7&startDate=${weekStartStr}`);
-            if (res.ok) {
-              const data = await res.json();
-              setDailyDetails(data.days || []);
-            }
-          } catch (e) {
-            console.error(e);
-          }
+          await loadWeekDetails(selectedDate, lat, lon);
         },
         (error) => console.warn('Location access denied in PlannerScreen.')
       );
@@ -81,6 +93,28 @@ export default function PlannerScreen() {
       ]);
     }
   }, []);
+
+  const handlePrevWeek = () => {
+    const prevWeekRef = new Date(selectedDate);
+    prevWeekRef.setDate(prevWeekRef.getDate() - 7);
+    setSelectedDate(prevWeekRef);
+    if (location.loaded) {
+      loadWeekDetails(prevWeekRef, location.lat, location.lon);
+    } else {
+      setWeekDays(getWeek(prevWeekRef));
+    }
+  };
+
+  const handleNextWeek = () => {
+    const nextWeekRef = new Date(selectedDate);
+    nextWeekRef.setDate(nextWeekRef.getDate() + 7);
+    setSelectedDate(nextWeekRef);
+    if (location.loaded) {
+      loadWeekDetails(nextWeekRef, location.lat, location.lon);
+    } else {
+      setWeekDays(getWeek(nextWeekRef));
+    }
+  };
 
   const handleSavePlan = () => {
     if (!newTitle.trim()) return;
@@ -133,9 +167,17 @@ export default function PlannerScreen() {
           <div className="flex-1 flex flex-col gap-8 md:gap-10">
             {/* Calendar Week/Month */}
             <div className="glass-panel p-6 rounded-3xl">
-              <div className="flex justify-between items-end mb-6">
-                <h3 className="font-semibold text-lg md:text-xl">{getMonthName(selectedDate)}</h3>
-                <span className="text-[#A2A9B3] text-xs md:text-sm">Sun - Sat</span>
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-2">
+                  <button onClick={handlePrevWeek} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors">
+                    <ChevronLeft size={20} className="text-white" />
+                  </button>
+                  <h3 className="font-semibold text-lg md:text-xl min-w-[140px] text-center md:text-left">{getMonthName(selectedDate)}</h3>
+                  <button onClick={handleNextWeek} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors">
+                    <ChevronRight size={20} className="text-white" />
+                  </button>
+                </div>
+                <span className="text-[#A2A9B3] text-xs md:text-sm hidden sm:inline">Sun - Sat</span>
               </div>
               <div className="flex justify-between items-center">
                 {weekDays.map((day, i) => {
@@ -200,17 +242,19 @@ export default function PlannerScreen() {
                   </div>
                   
                   {/* Bortle Class */}
-                  <div className="glass-panel rounded-3xl p-5 md:p-6 col-span-2 md:col-span-1 group cursor-pointer hover:border-white/20 transition-colors border border-transparent">
-                    <h4 className="text-xs md:text-sm font-semibold mb-3 md:mb-4 text-center md:text-left">GPS Location</h4>
-                    <div className="flex flex-row md:flex-col items-center justify-center md:justify-start gap-4 md:gap-0">
-                      <div className="flex items-center justify-center relative w-16 h-8 md:w-full md:h-12 md:mb-4">
-                         <Map size={24} className="text-[#4ADE80]" />
+                  <div className="glass-panel rounded-3xl p-5 md:p-6 col-span-2 md:col-span-1 group cursor-pointer hover:border-white/20 transition-colors border border-transparent flex flex-col justify-between">
+                    <h4 className="text-xs md:text-sm font-semibold mb-2 text-left">Dark Sky Index</h4>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#D9A441]/10 flex items-center justify-center text-[#D9A441]">
+                        <Star size={20} fill="#D9A441" />
                       </div>
-                      <div className="text-left md:text-center">
-                        <span className="text-[10px] md:text-xs text-white/90 font-mono">{location.loaded ? `${location.lat.toFixed(2)}°, ${location.lon.toFixed(2)}°` : 'Locating...'}</span>
-                        <br/>
-                        <span className="text-[9px] text-[#A2A9B3]">{location.loaded ? 'GPS Signal OK' : 'No Coordinates'}</span>
+                      <div className="flex flex-col">
+                        <span className="text-lg font-bold text-white">Class {bortleClass}</span>
+                        <span className="text-[10px] text-[#A2A9B3] font-medium uppercase tracking-wider">{bortleDesc}</span>
                       </div>
+                    </div>
+                    <div className="text-[10px] text-[#A2A9B3] mt-3 leading-relaxed border-t border-white/5 pt-2 font-mono">
+                      GPS: {location.loaded ? `${location.lat.toFixed(2)}°, ${location.lon.toFixed(2)}°` : 'Searching...'}
                     </div>
                   </div>
                 </div>
@@ -241,7 +285,20 @@ export default function PlannerScreen() {
                   if (plan.type === 'Event') { Icon = Map; color = '#D9A441'; }
 
                   return (
-                    <div key={plan.id} className={`glass-panel rounded-2xl p-4 md:p-5 flex items-center justify-between border relative overflow-hidden group cursor-pointer hover:bg-white/5 transition-colors`} style={{ borderColor: `${color}40` }}>
+                    <div 
+                      key={plan.id} 
+                      onClick={() => {
+                        const targetDate = new Date(plan.date);
+                        setSelectedDate(targetDate);
+                        if (location.loaded) {
+                          loadWeekDetails(targetDate, location.lat, location.lon);
+                        } else {
+                          setWeekDays(getWeek(targetDate));
+                        }
+                      }}
+                      className={`glass-panel rounded-2xl p-4 md:p-5 flex items-center justify-between border relative overflow-hidden group cursor-pointer hover:bg-white/5 transition-colors`} 
+                      style={{ borderColor: `${color}40` }}
+                    >
                       <div className="absolute left-0 top-0 bottom-0 w-1 md:w-1.5" style={{ backgroundColor: color }}></div>
                       <div className="flex items-center gap-4 ml-2">
                         <div className="w-12 h-12 rounded-full bg-[#161D2B] flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform" style={{ color: color }}>

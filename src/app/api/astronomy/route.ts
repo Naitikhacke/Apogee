@@ -49,6 +49,9 @@ export async function GET(req: Request) {
     if (isNaN(lat) || isNaN(lon)) {
       return NextResponse.json({ error: 'Invalid latitude or longitude.' }, { status: 400 });
     }
+
+    const bortle = estimateBortle(lat, lon);
+    const bortleDesc = getBortleDescription(bortle);
     
     const observer = new Observer(lat, lon, 0);
     const date = new Date();
@@ -160,6 +163,19 @@ export async function GET(req: Request) {
       const targetName = dso ? dso.name : planet!.name;
       const targetType = dso ? dso.type : 'Planet';
       const targetEq = dso ? dso.eq : planet!.eq;
+
+      // Compute current RA (in degrees) and Dec (in degrees)
+      let currentRaHours = 0;
+      let currentDecDegrees = 0;
+      if (dso) {
+        currentRaHours = dso.ra;
+        currentDecDegrees = dso.dec;
+      } else {
+        const planetEqu = Equator(planet!.body, date, observer, true, true);
+        currentRaHours = planetEqu.ra;
+        currentDecDegrees = planetEqu.dec;
+      }
+      const currentRaDegrees = currentRaHours * 15;
       
       // Calculate Alt/Az hourly path for the next 24 hours to find visibility window
       const path = [];
@@ -225,12 +241,13 @@ export async function GET(req: Request) {
             recommendedLocations = osmData.elements.map((el: any) => {
               const dist = calculateDistance(lat, lon, el.lat, el.lon);
               const name = el.tags?.name || 'Local Observatory';
+              const obsBortle = estimateBortle(el.lat, el.lon);
               return {
                 id: el.id.toString(),
                 name,
                 lat: el.lat,
                 lon: el.lon,
-                bortle: 'N/A', // Real Bortle requires a specialized light pollution API
+                bortle: obsBortle.toString(),
                 region: 'Local Area',
                 distance: Math.round(dist)
               };
@@ -242,6 +259,8 @@ export async function GET(req: Request) {
       }
         
       return NextResponse.json({
+        bortle,
+        bortleDesc,
         target: {
           name: targetName,
           type: targetType,
@@ -250,7 +269,9 @@ export async function GET(req: Request) {
           set: setTime,
           bestWindow: bestStart && bestEnd ? `${bestStart} - ${bestEnd}` : 'Not visible tonight',
           path,
-          recommendedLocations
+          recommendedLocations,
+          ra: currentRaDegrees,
+          dec: currentDecDegrees
         }
       });
     }
@@ -283,7 +304,10 @@ export async function GET(req: Request) {
       const moonFactor = dso.type === 'Galaxy' || dso.type === 'Nebula' ? (1 - moonIllum.phase_fraction) : 1; 
       const weatherFactor = 1 - (currentCloudCover / 100);
       const altitudeScore = Math.max(0, Math.min(100, (hor.altitude / 90) * 100));
-      const rating = Math.round(altitudeScore * moonFactor * weatherFactor);
+      
+      // Factor Bortle light pollution into DSO ratings (galaxies & nebulae are heavily affected)
+      const bortleFactor = Math.max(0.1, 1 - ((bortle - 1) / 9));
+      const rating = Math.round(altitudeScore * moonFactor * weatherFactor * bortleFactor);
       
       recommendations.push({
         id: dso.id,
@@ -358,6 +382,8 @@ export async function GET(req: Request) {
     };
     
     return NextResponse.json({
+      bortle,
+      bortleDesc,
       moon: {
         illumination: Math.round(moonIllum.phase_fraction * 100),
         age: moonAge.toFixed(1),
@@ -376,5 +402,71 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error('Astronomy calculation error:', error);
     return NextResponse.json({ error: error.message || 'Internal server error.' }, { status: 500 });
+  }
+}
+
+// --- Light Pollution (Bortle) Estimation Helpers ---
+function estimateBortle(lat: number, lon: number): number {
+  const majorCities = [
+    { name: "New York", lat: 40.7128, lon: -74.0060 },
+    { name: "London", lat: 51.5074, lon: -0.1278 },
+    { name: "Tokyo", lat: 35.6762, lon: 139.6503 },
+    { name: "Paris", lat: 48.8566, lon: 2.3522 },
+    { name: "Berlin", lat: 52.5200, lon: 13.4050 },
+    { name: "Sydney", lat: -33.8688, lon: 151.2093 },
+    { name: "Mumbai", lat: 19.0760, lon: 72.8777 },
+    { name: "Delhi", lat: 28.6139, lon: 77.2090 },
+    { name: "Beijing", lat: 39.9042, lon: 116.4074 },
+    { name: "Cairo", lat: 30.0444, lon: 31.2357 },
+    { name: "São Paulo", lat: -23.5505, lon: -46.6333 },
+    { name: "Los Angeles", lat: 34.0522, lon: -118.2437 },
+    { name: "Chicago", lat: 41.8781, lon: -87.6298 },
+    { name: "Toronto", lat: 43.6532, lon: -79.3832 },
+    { name: "Moscow", lat: 55.7558, lon: 37.6173 },
+    { name: "Istanbul", lat: 41.0082, lon: 28.9784 },
+    { name: "Shanghai", lat: 31.2304, lon: 121.4737 },
+    { name: "Singapore", lat: 1.3521, lon: 103.8198 },
+    { name: "Bangkok", lat: 13.7563, lon: 100.5018 },
+    { name: "Jakarta", lat: -6.2088, lon: 106.8456 },
+    { name: "Seoul", lat: 37.5665, lon: 126.9780 },
+    { name: "Riyadh", lat: 24.7136, lon: 46.6753 }
+  ];
+
+  const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
+    return Math.sqrt(dLat * dLat + dLon * dLon) * 111;
+  };
+
+  let minDist = Infinity;
+  for (const c of majorCities) {
+    const dist = getDist(lat, lon, c.lat, c.lon);
+    if (dist < minDist) {
+      minDist = dist;
+    }
+  }
+
+  if (minDist < 15) return 8; // Urban
+  if (minDist < 35) return 7; // Suburban/Urban
+  if (minDist < 60) return 6; // Bright suburban
+  if (minDist < 90) return 5; // Suburban
+  if (minDist < 130) return 4; // Rural/suburban
+  if (minDist < 180) return 3; // Rural
+  if (minDist < 250) return 2; // Dark sky
+  return 1; // Pristine dark sky
+}
+
+function getBortleDescription(classNum: number): string {
+  switch (classNum) {
+    case 1: return "Pristine Dark Sky";
+    case 2: return "Typical Truly Dark Sky";
+    case 3: return "Rural Sky";
+    case 4: return "Rural/Suburban Transition";
+    case 5: return "Suburban Sky";
+    case 6: return "Bright Suburban Sky";
+    case 7: return "Suburban/Urban Transition";
+    case 8: return "City Sky";
+    case 9: return "Inner-City Sky";
+    default: return "Unknown";
   }
 }

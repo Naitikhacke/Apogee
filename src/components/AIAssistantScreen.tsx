@@ -89,12 +89,49 @@ export default function AIAssistantScreen({ onBack }: { onBack: () => void }) {
       }
 
       const data = await response.json();
+      let assistantMessage = data.message;
+      let planAction = null;
+      
+      // Parse simulated GOTO planning instructions: [PLAN_ACTION: {"title": "...", "date": "...", "time": "...", "type": "..."}]
+      const planRegex = /\[PLAN_ACTION:\s*({.*?})\]/;
+      const match = assistantMessage.match(planRegex);
+      if (match) {
+        try {
+          planAction = JSON.parse(match[1]);
+          // Clean the visible text so the raw command string is hidden
+          assistantMessage = assistantMessage.replace(planRegex, '').trim();
+        } catch (e) {
+          console.error("Failed to parse plan action", e);
+        }
+      }
+
+      if (planAction) {
+        const saved = localStorage.getItem('apoggee_plans');
+        let currentPlans = [];
+        if (saved) {
+          try {
+            currentPlans = JSON.parse(saved);
+          } catch (e) {}
+        }
+        const newPlan = {
+          id: Date.now().toString(),
+          title: planAction.title,
+          date: planAction.date,
+          time: planAction.time || '22:00',
+          type: planAction.type || 'Deep Sky'
+        };
+        const updated = [...currentPlans, newPlan].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        localStorage.setItem('apoggee_plans', JSON.stringify(updated));
+        
+        // Append visual feedback to message
+        assistantMessage += `\n\n🗓️ **Session Scheduled:** Added *${newPlan.title}* to your Planner for **${newPlan.date}** at **${newPlan.time}**.`;
+      }
       
       setMessages((prev) => [
         ...prev,
         {
           role: 'model',
-          content: data.message,
+          content: assistantMessage,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }
       ]);
